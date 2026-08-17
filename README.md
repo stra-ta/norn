@@ -4,10 +4,15 @@ C++20 concurrency structures with an emphasis on memory-model correctness, measu
 
 ## Status
 
-**M0 - repository foundation**
+**M3 - SPSC performance analysis**
 
-The repository currently contains only build, test, benchmark, documentation, and CI scaffolding.
-No concurrent data structure has been implemented yet.
+The repository contains unbounded and bounded mutex queues plus a bounded SPSC ring buffer.
+The SPSC queue is the first lock-free structure and uses explicit object lifetime management.
+MPMC and reclamation structures do not exist yet.
+
+The local Apple `g++` command resolves to Apple Clang, not GNU GCC.
+Real GNU GCC verification was performed with GCC 13.3.0 on Ubuntu 24.04 LTS (aarch64) inside a disposable Lima VM: default, release, ASan, UBSan, and TSan configurations all pass with strict warnings promoted to errors.
+The same configurations run in Ubuntu CI for both GCC and Clang.
 
 ## Build
 
@@ -20,6 +25,14 @@ ctest --preset default
 ```
 
 Dependencies are fetched by CMake for the test and benchmark targets.
+
+To record benchmark metadata alongside Google Benchmark JSON output:
+
+```sh
+cmake --preset release
+cmake --build --preset release
+python3 tools/run_benchmark.py --output results/mutex-queue.json --compiler c++ --build-type Release
+```
 
 ## Roadmap
 
