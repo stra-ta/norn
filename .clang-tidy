@@ -1,0 +1,4 @@
+Checks: '-*,bugprone-*,cppcoreguidelines-*,modernize-*,performance-*'
+WarningsAsErrors: ''
+HeaderFilterRegex: 'include/norn/.*'
+FormatStyle: file

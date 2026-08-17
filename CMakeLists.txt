@@ -1,0 +1,51 @@
+cmake_minimum_required(VERSION 3.25)
+
+project(norn VERSION 0.1.0 LANGUAGES CXX)
+
+option(NORN_BUILD_TESTS "Build Norn tests" ON)
+option(NORN_BUILD_BENCHMARKS "Build Norn benchmarks" ON)
+option(NORN_WARNINGS_AS_ERRORS "Treat project warnings as errors" ON)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_library(norn INTERFACE)
+target_include_directories(norn INTERFACE ${PROJECT_SOURCE_DIR}/include)
+target_compile_features(norn INTERFACE cxx_std_20)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(norn INTERFACE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+  if(NORN_WARNINGS_AS_ERRORS)
+    target_compile_options(norn INTERFACE -Werror)
+  endif()
+endif()
+
+include(CTest)
+if(NORN_BUILD_TESTS)
+  enable_testing()
+  include(FetchContent)
+  FetchContent_Declare(
+    Catch2
+    URL https://github.com/catchorg/Catch2/archive/refs/tags/v3.8.1.tar.gz
+    URL_HASH SHA256=18b3f70ac80fccc340d8c6ff0f339b2ae64944782f8d2fca2bd705cf47cadb79
+  )
+  FetchContent_MakeAvailable(Catch2)
+  add_executable(norn_tests tests/smoke_test.cpp)
+  target_link_libraries(norn_tests PRIVATE norn Catch2::Catch2WithMain)
+  include(Catch)
+  catch_discover_tests(norn_tests)
+endif()
+
+if(NORN_BUILD_BENCHMARKS)
+  include(FetchContent)
+  FetchContent_Declare(
+    benchmark
+    URL https://github.com/google/benchmark/archive/refs/tags/v1.9.1.tar.gz
+    URL_HASH SHA256=32131c08ee31eeff2c8968d7e874f3cb648034377dfc32a4c377fa8796d84981
+  )
+  set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(benchmark)
+  add_executable(norn_benchmarks benchmarks/smoke_benchmark.cpp)
+  target_link_libraries(norn_benchmarks PRIVATE norn benchmark::benchmark_main)
+endif()
