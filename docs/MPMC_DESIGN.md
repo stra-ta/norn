@@ -152,11 +152,11 @@ This is a real linearizability gap of the weak variant, not a theoretical edge.
 The operation itself is never blocked waiting on another thread; it either returns false
 or retries, which is the progress property described below.
 
-The tradeoff is explicit: weak semantics keep every operation non-blocking and terminating,
-at the cost of potentially incorrect empty and full results while a thread is paused
-mid-operation.
-The alternative, spinning until the stalled slot resolves, restores accuracy but makes the
-operation block on the paused thread.
+The tradeoff is explicit: weak semantics keep every operation non-blocking and
+immediately returning, at the cost of potentially incorrect empty and full results
+while a thread is inside the reservation window.
+The alternative, spinning until the stalled slot resolves, restores accuracy but makes
+the operation block on the paused thread.
 Norn chooses the weak variant to match the `try_*` API, and documents the gap.
 
 ## CAS loops
@@ -192,23 +192,32 @@ reservation and publication makes `empty()` report non-empty with nothing pop-ab
 
 ## Progress guarantee
 
-Every operation either completes with a false return or retries while other threads
-advance the counters.
-No operation can be permanently blocked by a thread that fails to make progress.
-The queue is therefore lock-free at the system level: at any moment at least one thread
-can complete an operation, because every failed CAS coincides with another thread's
-successful counter advancement, and false returns terminate immediately.
-Individual operations are not wait-free: a thread that keeps losing CAS races can retry
-without an upper bound while other threads keep progressing.
+The queue is mutex-free and its API is non-blocking: the `try_*` operations never wait
+on a lock or condition variable and always return.
+It is not formally lock-free, and it is not wait-free.
 
-This guarantee is qualified by the platform: it holds where
-`std::atomic<std::size_t>::is_always_lock_free` is true, which is enforced with a
-static assert in the implementation.
-The sequence and position atomics must be lock-free for the queue to be lock-free.
+The formal definition of lock-free requires that infinitely often some method call
+finishes in a finite number of steps.
+This queue does not satisfy that definition, for two reasons.
+A thread can starve in the reservation CAS loop: it may lose races indefinitely while
+other threads keep winning, so a single call has no completion bound.
+More importantly, a preempted thread that holds a reserved-but-unpublished slot blocks
+the queue's logical progress at that position: consumers report false-empty, producers
+report false-full, and up to `Capacity - 1` published items stay unreachable until the
+thread resumes.
+During that window the weak semantics also return results that violate linearizability,
+so the affected operations are not merely slow but observably incorrect.
 
-The queue is not wait-free: under contention a thread may retry many times.
+What the queue does guarantee: every `try_*` call returns without blocking, every
+successful call linearizes at its reservation CAS, and a thread that is not starved by
+other threads completes its operation.
 The uncontended single-producer, single-consumer case degrades to a single probe per
 operation.
+
+The atomics used by the queue are lock-free on the platforms this project targets;
+`std::atomic<std::size_t>::is_always_lock_free` is enforced with a static assert.
+That property concerns the hardware primitives, not the progress guarantee of the
+queue algorithm itself.
 
 ## Paused mid-operation
 
@@ -317,7 +326,7 @@ Real GNU GCC verification will be repeated on the disposable Linux VM.
 - Accept the weak, non-blocking semantics with their documented linearizability gap.
 - Accept the `Capacity >= 2` constraint.
 - Accept the noexcept-construction, nothrow-move, and nothrow-destruction constraints as the honest cost of the scheme.
-- Accept that the progress guarantee is system-level lock-free, not wait-free, and not per-operation bounded.
+- Accept that the queue is mutex-free and non-blocking but not formally lock-free or wait-free.
 - Defer `close()` and drain termination until a later milestone.
 - Defer padded cells until a measurement motivates them.
 - Keep arbitrary capacity via modulo instead of requiring a power of two.

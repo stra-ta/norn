@@ -35,6 +35,9 @@ namespace detail {
 // Producers claim slots with a CAS on enqueue_pos_, consumers claim slots
 // with a CAS on dequeue_pos_, and each slot's sequence number publishes the
 // payload with release semantics and publishes slot reuse with release too.
+// The queue is mutex-free and non-blocking, but not formally lock-free: a
+// preempted thread holding a reserved-but-unpublished slot blocks logical
+// progress through the queue.
 // See docs/MPMC_DESIGN.md for the full design and its documented limits.
 template <typename T, std::size_t Capacity>
 class mpmc_queue {

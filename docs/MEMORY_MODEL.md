@@ -78,8 +78,13 @@ While a producer is inside that window, consumers can observe false-empty and pr
 The counters can differ while no item is pop-able because `enqueue_pos_` advances at reservation time rather than publication time.
 Callers must not use it to infer drain completion.
 
-The queue is lock-free at the system level where the position and sequence atomics are lock-free, which the implementation enforces with a static assert.
-It is not wait-free: under contention a thread may retry its reservation CAS without an upper bound.
+The queue is mutex-free and its API is non-blocking, but it is not formally lock-free.
+A preempted thread holding a reserved-but-unpublished slot blocks logical progress
+through the queue, and a thread can starve in the reservation CAS loop while other
+threads keep winning.
+The position and sequence atomics themselves are lock-free on the target platforms,
+enforced with a static assert; that property concerns the primitives, not the
+algorithm's progress guarantee.
 A thread paused inside the reservation-to-publication window stalls the queue at its position, stranding up to `Capacity - 1` published items, until it resumes.
 
 This document will record, for each structure, atomic state, ownership, publication mechanisms, happens-before relationships, linearization points, and invariants.
