@@ -72,7 +72,8 @@ A producer's acquire load of that value happens-before its next write to the slo
 
 Successful operations linearize at their reservation CAS.
 Failed operations linearize at their probe only under quiescence, meaning no thread is inside the window between its reservation CAS and its publication store.
-While a producer is inside that window, consumers can observe false-empty and producers false-full: the weak semantics of this queue trade exact empty and full answers for non-blocking operations.
+While a producer is inside that window, consumers can observe false-empty; while a consumer is inside its claim-to-release window, producers can observe false-full.
+The false results are the cost of the weak semantics: the operations are non-blocking but temporarily observably wrong.
 
 `empty()` is a reservation-gap snapshot, not an availability check.
 The counters can differ while no item is pop-able because `enqueue_pos_` advances at reservation time rather than publication time.

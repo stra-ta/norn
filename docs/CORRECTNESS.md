@@ -28,8 +28,28 @@ The exactly-once drain protocol joins all producers before draining, because a t
 semantics.
 
 A deterministic gated-construction test holds one producer inside the
-reservation-to-publication window and verifies the documented false-empty and
-false-full behavior plus in-order drain of the stranded items after the gate opens.
+reservation-to-publication window and verifies the documented false-empty behavior
+plus in-order drain of the stranded items after the gate opens.
+The failed push at the reserved frontier is consistent with a genuinely full abstract
+queue under the reservation-CAS linearization, so it is not called false-full.
+
+A deterministic consumer-hole test holds one consumer inside its claim-to-release
+window and verifies the asymmetric behavior: other consumers advance past the held
+position, while producers see false-full at the held slot because the item was already
+consumed at the claim linearization point.
+
+M5 is a correctness campaign rather than a feature milestone.
+It adds parameterized exactly-once and 1P1C FIFO histories for the MPMC queue, a 1P1C
+parameterized stress for the SPSC queue including the padded variant, deterministic
+close-and-drain protocols for both mutex queue families, and a blocked-consumer wake
+test.
+The campaign also runs an educational weakened-order probe outside the repository that
+changes the producer's publish store to relaxed and shows the resulting TSan race on
+the payload access.
+All 24 tests pass under default, Release, ASan, UBSan, and TSan on macOS (Apple Clang)
+and ARM64 Linux (GNU GCC 13.3).
+The full campaign design, platform matrix, and results are in
+`docs/CORRECTNESS_CAMPAIGN.md`.
 
 A producer claims a slot with a CAS on `enqueue_pos_` and publishes the object with a
 release store on the slot sequence.

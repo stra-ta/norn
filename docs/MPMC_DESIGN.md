@@ -144,10 +144,14 @@ Under quiescence, meaning no thread is inside the window between its reservation
 its publication store (whether paused or merely slow), a behind sequence number at the
 probe is an accurate full or empty signal, and the failed operation linearizes at its
 probe.
-While any producer is inside that window, the weak semantics can report false-empty or
-false-full: a consumer probing a slot whose producer has reserved but not yet published
-sees the slot as empty even though other producers may have published items elsewhere in
-the ring.
+While any producer is inside its reservation-to-publication window, a consumer probing
+the producer's slot sees it as empty even though other producers may have published
+items elsewhere in the ring: this is the false-empty gap.
+The producer's own failed pushes at the reserved frontier are not false-full: under the
+reservation-CAS linearization the reserved slot already counts as an enqueued item, so
+the queue is genuinely full at that position.
+False-full occurs only from the consumer side, as described in the paused-operation
+section below.
 This is a real linearizability gap of the weak variant, not a theoretical edge.
 The operation itself is never blocked waiting on another thread; it either returns false
 or retries, which is the progress property described below.
@@ -201,11 +205,12 @@ finishes in a finite number of steps.
 This queue does not satisfy that definition, for two reasons.
 A thread can starve in the reservation CAS loop: it may lose races indefinitely while
 other threads keep winning, so a single call has no completion bound.
-More importantly, a preempted thread that holds a reserved-but-unpublished slot blocks
-the queue's logical progress at that position: consumers report false-empty, producers
-report false-full, and up to `Capacity - 1` published items stay unreachable until the
-thread resumes.
-During that window the weak semantics also return results that violate linearizability,
+More importantly, a preempted producer that holds a reserved-but-unpublished slot blocks
+the queue's logical progress at that position: consumers report false-empty and up to
+`Capacity - 1` published items stay unreachable until the producer resumes.
+A preempted consumer in its claim-to-release window makes producers report false-full at
+the held slot, as described in the paused-operation section below.
+During either window the weak semantics also return results that violate linearizability,
 so the affected operations are not merely slow but observably incorrect.
 
 What the queue does guarantee: every `try_*` call returns without blocking, every
@@ -238,8 +243,11 @@ become reachable in order.
 
 A consumer paused after claiming but before releasing the slot has a different effect.
 Other consumers can continue past it, because they probe their own positions.
-Producers report full for the held slot, which is accurate: the slot genuinely is not
-reusable until the consumer releases it.
+Producers see false-full at the held slot: the slot's item is already consumed at the
+claim linearization point, so capacity exists, yet the producer's probe of the unreleased
+slot reports full.
+The false-empty and false-full results are therefore asymmetric: the producer hole
+causes false-empty, and the consumer hole causes false-full.
 
 These are the fundamental limitations of the scheme and are documented rather than hidden.
 
@@ -301,8 +309,11 @@ under the weak semantics.
 Two deterministic tests exercise the paths that ordinary stress leaves to chance.
 A gated-construction test uses a value type whose constructor blocks until released: one
 producer enters the reservation window and stalls, other producers and consumers operate
-around it, and the test verifies the false-empty and false-full behavior plus in-order
-drain of the stranded items after the gate opens.
+around it, and the test verifies the false-empty observation, the genuine-full push
+result at the reserved frontier, and the in-order drain of the stranded items after the
+gate opens.
+A gated-move test blocks a consumer inside its claim-to-release window and verifies the
+false-full observation at the held slot while other consumers advance.
 The capacity is 2 and the thread count exceeds the capacity so the full path is forced.
 A modular-comparison unit test drives the sequence comparison helper with values near
 `SIZE_MAX` to verify the half-range threshold logic without running 2^64 operations.

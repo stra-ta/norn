@@ -33,6 +33,34 @@ struct gated_value {
   std::atomic<bool>& gate_;
 };
 
+// Blocks in its move constructor until the gate opens when should_block is true.
+// Used to hold a consumer deterministically inside the claim-to-release window:
+// the queue's optional pop path claims the slot with a CAS and then
+// move-constructs the returned optional in place from std::move(*element), which
+// cannot be elided, so this constructor runs in the consumer thread after the
+// claim CAS.
+struct gated_move {
+  explicit gated_move(int input, bool should_block, std::atomic<bool>& entered,
+                      std::atomic<bool>& gate) noexcept
+      : number(input), block_on_move_(should_block), entered_(entered), gate_(gate) {}
+  gated_move(const gated_move&) = delete;
+  gated_move& operator=(const gated_move&) = delete;
+  gated_move(gated_move&& other) noexcept
+      : number(other.number), block_on_move_(other.block_on_move_), entered_(other.entered_),
+        gate_(other.gate_) {
+    if (block_on_move_) {
+      entered_.store(true, std::memory_order_release);
+      while (!gate_.load(std::memory_order_acquire)) {
+        std::this_thread::yield();
+      }
+    }
+  }
+  int number;
+  bool block_on_move_;
+  std::atomic<bool>& entered_;
+  std::atomic<bool>& gate_;
+};
+
 }  // namespace
 
 TEST_CASE("MPMC queue reports full and empty boundaries") {
@@ -123,6 +151,10 @@ TEST_CASE("MPMC queue consumes every value exactly once across multiple producer
           continue;
         }
         empty_streak = 0;
+        if (*value >= total) {
+          failed.store(true, std::memory_order_relaxed);
+          return;
+        }
         if (seen[*value].exchange(true, std::memory_order_relaxed)) {
           duplicate.store(true, std::memory_order_relaxed);
         }
@@ -216,6 +248,9 @@ TEST_CASE("reservation window with a blocked producer strands later items until 
 
   // Consumers see the reservation hole as empty even though slot 1 holds a
   // published item: the documented false-empty window of the weak variant.
+  // The failed third push is NOT false-full: under the reservation-CAS
+  // linearization the reserved slot 0 already counts as an enqueued item, so
+  // with slot 1 published the abstract queue is genuinely full.
   const auto early_pop = queue.try_pop();
 
   gate.store(true, std::memory_order_release);
@@ -230,6 +265,88 @@ TEST_CASE("reservation window with a blocked producer strands later items until 
   // The hole closes and the stranded items drain in order.
   REQUIRE(queue.try_pop()->number == blocked);
   REQUIRE(queue.try_pop()->number == 1);
+  REQUIRE_FALSE(queue.try_pop().has_value());
+  REQUIRE(queue.empty());
+}
+
+// A consumer blocked in its move-out after claiming the slot produces the
+// asymmetric false-full behavior: other consumers advance past the held
+// position, while a producer sees the held slot as full even though the item
+// was already consumed at the claim linearization point, so capacity exists.
+// The held value is emplaced rather than pushed: pushing a block-on-move value
+// would trigger the blocking move while moving the temporary into the slot.
+TEST_CASE("claim window with a blocked consumer advances others but shows false-full to producers") {
+  constexpr int held = 1;
+  norn::mpmc_queue<gated_move, 2> queue;
+  std::atomic<bool> entered = false;
+  std::atomic<bool> gate = false;
+
+  // Slot 0: the value the gated consumer will claim and then block in the move.
+  REQUIRE(queue.emplace(held, true, entered, gate));
+  // Slot 1: a plain value for the second consumer to pop while the gate is closed.
+  REQUIRE(queue.emplace(2, false, entered, gate));
+
+  std::atomic<int> held_number{0};
+  std::atomic<bool> held_popped{false};
+  std::thread gated_consumer([&] {
+    auto result = queue.try_pop();
+    if (result.has_value()) {
+      held_number.store(result->number, std::memory_order_relaxed);
+      held_popped.store(true, std::memory_order_release);
+    }
+  });
+
+  for (int attempt = 0; attempt < 10'000 && !entered.load(std::memory_order_acquire); ++attempt) {
+    std::this_thread::yield();
+  }
+  const bool saw_entered = entered.load(std::memory_order_acquire);
+
+  // The gate-closed checks below can only run if the gated consumer actually
+  // entered its move-out: otherwise the main thread's own probe could claim
+  // the gated slot and block on the still-closed gate. On the failure path we
+  // open the gate immediately so it is reachable from every branch.
+  bool advanced_popped = false;
+  int advanced_number = 0;
+  bool saw_false_full = false;
+  if (saw_entered) {
+    // While the gate stays closed, the gated consumer holds slot 0's claim.
+    // A second consumer can still advance past the held position and pop slot 1.
+    if (auto adv = queue.try_pop(); adv.has_value()) {
+      advanced_popped = true;
+      advanced_number = adv->number;
+    }
+
+    // A producer probing the held slot sees false-full: the item was already
+    // consumed at the claim linearization point, so capacity exists, yet the
+    // unreleased slot reports full. Cap the attempts so a regression cannot hang.
+    bool pushed_through = false;
+    std::size_t attempts = 0;
+    while (attempts++ < 1'000'000) {
+      if (queue.emplace(3, false, entered, gate)) {
+        pushed_through = true;
+        break;
+      }
+      std::this_thread::yield();
+    }
+    saw_false_full = !pushed_through;
+  }
+
+  gate.store(true, std::memory_order_release);
+  gated_consumer.join();
+
+  REQUIRE(saw_entered);
+  REQUIRE(held_popped.load(std::memory_order_acquire));
+  REQUIRE(held_number.load(std::memory_order_relaxed) == held);
+  REQUIRE(advanced_popped);
+  REQUIRE(advanced_number == 2);
+  REQUIRE(saw_false_full);
+
+  // With the gate open and the slot released, the producer's push succeeds
+  // and the queue drains completely.
+  REQUIRE(queue.emplace(3, false, entered, gate));
+  const auto drained = queue.try_pop();
+  REQUIRE(drained.has_value());
+  REQUIRE(drained->number == 3);
   REQUIRE_FALSE(queue.try_pop().has_value());
   REQUIRE(queue.empty());
 }

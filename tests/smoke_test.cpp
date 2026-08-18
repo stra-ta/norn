@@ -8,6 +8,130 @@
 #include "norn/mutex_queue.hpp"
 #include "norn/spsc_queue.hpp"
 
+namespace {
+
+// M5 campaign Proof 5: the accepted-before-close protocol for one mutex queue
+// family. Consumers run concurrently with producers (a bounded queue can only
+// accept values while someone drains), then close() is called after all
+// producers joined, and consumers drain until nullopt. The consumed set must
+// equal the accepted set exactly once.
+template <typename Queue>
+void run_close_and_drain(std::size_t producers, std::size_t consumers,
+                         std::size_t values_per_producer) {
+  const std::size_t total = producers * values_per_producer;
+  Queue queue;
+  std::vector<std::atomic<int>> seen(total);
+  for (auto& count : seen) {
+    count.store(0, std::memory_order_relaxed);
+  }
+  std::atomic<std::size_t> consumed{0};
+  std::atomic<bool> failed{false};
+
+  // Consumers run concurrently with producers (a bounded queue can only accept
+  // values while someone drains). pop() blocks when empty; close() below wakes
+  // every blocked pop, so consumers always terminate once the main thread
+  // reaches close(), which it does because producers always terminate: they
+  // either finish their values or hit the failure cap.
+  std::vector<std::thread> consumer_threads;
+  for (std::size_t c = 0; c < consumers; ++c) {
+    consumer_threads.emplace_back([&] {
+      while (consumed.load(std::memory_order_relaxed) < total &&
+             !failed.load(std::memory_order_relaxed)) {
+        auto value = queue.pop();
+        if (!value.has_value()) {
+          return;
+        }
+        if (static_cast<std::size_t>(*value) >= total) {
+          failed.store(true, std::memory_order_relaxed);
+          return;
+        }
+        seen[static_cast<std::size_t>(*value)].fetch_add(1, std::memory_order_relaxed);
+        consumed.fetch_add(1, std::memory_order_relaxed);
+      }
+    });
+  }
+
+  std::vector<std::thread> producer_threads;
+  for (std::size_t p = 0; p < producers; ++p) {
+    producer_threads.emplace_back([&, p] {
+      const int first = static_cast<int>(p * values_per_producer);
+      std::size_t attempts = 0;
+      for (std::size_t value = 0; value < values_per_producer &&
+                              !failed.load(std::memory_order_relaxed);) {
+        // Bounded queues report full; unbounded queues never do. Retry keeps
+        // the protocol uniform across both families. The cap resets on
+        // progress, so a correct run never approaches it.
+        if (queue.try_push(first + static_cast<int>(value))) {
+          ++value;
+          attempts = 0;
+        } else if (++attempts > 1'000'000) {
+          failed.store(true, std::memory_order_relaxed);
+          return;
+        } else {
+          std::this_thread::yield();
+        }
+      }
+    });
+  }
+  for (auto& producer : producer_threads) {
+    producer.join();
+  }
+
+  // close() runs after all producers joined, so it cannot race a push; the
+  // serialization of push and close by the queue's mutex is established by
+  // inspection. Consumers wake on close and drain the remainder.
+  queue.close();
+  for (auto& consumer : consumer_threads) {
+    consumer.join();
+  }
+
+  REQUIRE_FALSE(failed.load(std::memory_order_relaxed));
+  REQUIRE(consumed.load(std::memory_order_relaxed) == total);
+  for (const auto& count : seen) {
+    REQUIRE(count.load(std::memory_order_relaxed) == 1);
+  }
+}
+
+}  // namespace
+
+TEST_CASE("unbounded mutex queue drains every accepted value exactly once after close") {
+  run_close_and_drain<norn::mutex_queue<int>>(4, 2, 500);
+}
+
+TEST_CASE("bounded mutex queue drains every accepted value exactly once after close") {
+  run_close_and_drain<norn::bounded_mutex_queue<int, 16>>(4, 2, 500);
+}
+
+TEST_CASE("blocked consumer wakes when the queue closes") {
+  norn::mutex_queue<int> queue;
+  std::atomic<bool> pop_started = false;
+  std::atomic<bool> pop_returned = false;
+  std::optional<int> result;
+  std::thread consumer([&] {
+    pop_started.store(true, std::memory_order_release);
+    result = queue.pop();
+    pop_returned.store(true, std::memory_order_release);
+  });
+  for (int attempt = 0; attempt < 10'000 && !pop_started.load(std::memory_order_acquire); ++attempt) {
+    std::this_thread::yield();
+  }
+  REQUIRE(pop_started.load(std::memory_order_acquire));
+  // Best-effort proof that the consumer is inside the wait rather than about
+  // to enter it after close(): the consumer must not have returned within a
+  // bounded window, mirroring the blocking-push wake test. This cannot prove
+  // the consumer is inside the condition-variable wait without instrumenting
+  // the queue, but combined with close() below it is the strongest available
+  // deterministic check.
+  for (int attempt = 0; attempt < 1'000 && !pop_returned.load(std::memory_order_acquire); ++attempt) {
+    std::this_thread::yield();
+  }
+  REQUIRE_FALSE(pop_returned.load(std::memory_order_acquire));
+  queue.close();
+  consumer.join();
+  REQUIRE(pop_returned.load(std::memory_order_acquire));
+  REQUIRE_FALSE(result.has_value());
+}
+
 TEST_CASE("unbounded mutex queue preserves FIFO order") {
   norn::mutex_queue<int> queue;
   REQUIRE(queue.try_push(1));

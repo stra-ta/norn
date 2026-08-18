@@ -18,5 +18,12 @@ and slot reuse with release stores.
 It uses weak, non-blocking semantics and has no `close()`; its design, linearizability
 properties, and progress guarantees are documented in `docs/MPMC_DESIGN.md`.
 
+M5 is a concurrency correctness campaign, not a feature milestone.
+It validates exactly-once and 1P1C FIFO behavior under parameterized histories, demonstrates
+the MPMC reservation-hole progress limitation deterministically, verifies mutex
+close-and-drain semantics, and shows the memory-order sensitivity with an educational
+weakened-order probe.
+The campaign design and results are in `docs/CORRECTNESS_CAMPAIGN.md`.
+
 The planned scope is a mutex reference queue, bounded SPSC queue, bounded MPMC queue, and one carefully documented memory-reclamation implementation.
 Networking, schedulers, coroutine runtimes, and general-purpose threading abstractions are out of scope.

@@ -4,7 +4,7 @@ C++20 concurrency structures with an emphasis on memory-model correctness, measu
 
 ## Status
 
-**M4 - bounded MPMC queue**
+**M5 - concurrency correctness campaign**
 
 The repository contains unbounded and bounded mutex queues, a bounded SPSC ring buffer,
 and a bounded MPMC ring queue.
@@ -13,9 +13,15 @@ The MPMC queue is the first multi-producer, multi-consumer structure and uses th
 sequence-number ring scheme with documented weak-semantics tradeoffs.
 Memory reclamation structures do not exist yet.
 
+M5 is a correctness campaign, not a feature: parameterized exactly-once and 1P1C FIFO
+histories, deterministic demonstrations of the MPMC reservation-hole progress
+limitation, mutex close-and-drain protocols, and an educational weakened-order probe
+showing the memory-order sensitivity under TSan.
+See `docs/CORRECTNESS_CAMPAIGN.md` for the campaign design and results.
+
 The local Apple `g++` command resolves to Apple Clang, not GNU GCC.
 Real GNU GCC verification was performed with GCC 13.3.0 on Ubuntu 24.04 LTS (aarch64) inside a disposable Lima VM: default, release, ASan, UBSan, and TSan configurations all pass with strict warnings promoted to errors.
-The same configurations run in Ubuntu CI for both GCC and Clang.
+The same configurations run in Ubuntu CI for both GCC and Clang; native x86-64 runs execute in CI on push and have not been pushed yet.
 
 ## Build
 
