@@ -60,6 +60,9 @@ def main() -> int:
             "benchmark_configurations": {
                 "bounded_mutex_queue_throughput": {"producer_count": 0, "consumer_count": 0},
                 "spsc_throughput": {"producer_count": 1, "consumer_count": 1},
+                "mpmc_throughput<1, 1>": {"producer_count": 1, "consumer_count": 1},
+                "mpmc_throughput<2, 2>": {"producer_count": 2, "consumer_count": 2},
+                "mpmc_throughput<4, 4>": {"producer_count": 4, "consumer_count": 4},
             },
         }
         output_path = Path(args.output)

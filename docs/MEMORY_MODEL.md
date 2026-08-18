@@ -53,5 +53,34 @@ Alignment does not change the memory-order protocol: both variants publish indic
 Padding only changes the physical placement of the atomic state.
 The effectiveness of separation is hardware- and topology-dependent, so the padded layout is retained only if the measurement supports it.
 
+## MPMC queue
+
+The bounded MPMC queue is a Vyukov-style ring of sequence-numbered slots.
+The full design, including the reservation protocol, slot state machine, wraparound comparison, and documented limitations, is in `docs/MPMC_DESIGN.md`.
+This section records the memory-order reasoning.
+
+Producers claim a slot by winning a relaxed CAS on `enqueue_pos_`.
+Consumers claim a slot by winning a relaxed CAS on `dequeue_pos_`.
+The counters only need atomic monotonic advancement and CAS uniqueness, so relaxed order suffices for them.
+
+The slot sequence number is the synchronization backbone.
+A producer constructs the payload and then publishes it with a release store of `sequence = pos + 1`.
+A consumer acquires that value before reading the payload, so the release/acquire pair establishes the happens-before from construction to consumption.
+
+The consumer destroys the moved-from residue and then releases the slot with a release store of `sequence = pos + Capacity`.
+A producer's acquire load of that value happens-before its next write to the slot, so the slot is never reused before the consumer is done with the old object.
+
+Successful operations linearize at their reservation CAS.
+Failed operations linearize at their probe only under quiescence, meaning no thread is inside the window between its reservation CAS and its publication store.
+While a producer is inside that window, consumers can observe false-empty and producers false-full: the weak semantics of this queue trade exact empty and full answers for non-blocking operations.
+
+`empty()` is a reservation-gap snapshot, not an availability check.
+The counters can differ while no item is pop-able because `enqueue_pos_` advances at reservation time rather than publication time.
+Callers must not use it to infer drain completion.
+
+The queue is lock-free at the system level where the position and sequence atomics are lock-free, which the implementation enforces with a static assert.
+It is not wait-free: under contention a thread may retry its reservation CAS without an upper bound.
+A thread paused inside the reservation-to-publication window stalls the queue at its position, stranding up to `Capacity - 1` published items, until it resumes.
+
 This document will record, for each structure, atomic state, ownership, publication mechanisms, happens-before relationships, linearization points, and invariants.
 Memory orders will be justified by the synchronization relationship they establish, not selected by convention.

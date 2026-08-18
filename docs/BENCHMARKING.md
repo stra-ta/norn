@@ -9,6 +9,12 @@ That limitation is intentional for the first comparison and will be addressed be
 Queue construction, destruction, retry loops, and scheduler yields are also included in the current timed workload.
 Results are therefore useful for a first relative comparison, not a final cycles-per-operation claim.
 
+M4 adds a multi-thread MPMC batch benchmark for 1x1, 2x2, and 4x4 producer/consumer
+configurations, with the same per-iteration thread setup cost and the same caveats as
+the SPSC benchmark.
+Retry-on-full producer loops and retry-on-empty consumer loops are part of the timed
+workload, so the numbers compare configurations rather than absolute throughput.
+
 Hypothesis: separating the producer-owned and consumer-owned indices may reduce cache-line invalidation when the two threads run on different cores.
 The result is hardware- and topology-dependent, so padding is retained only if the measurement supports it.
 

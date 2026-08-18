@@ -4,11 +4,14 @@ C++20 concurrency structures with an emphasis on memory-model correctness, measu
 
 ## Status
 
-**M3 - SPSC performance analysis**
+**M4 - bounded MPMC queue**
 
-The repository contains unbounded and bounded mutex queues plus a bounded SPSC ring buffer.
+The repository contains unbounded and bounded mutex queues, a bounded SPSC ring buffer,
+and a bounded MPMC ring queue.
 The SPSC queue is the first lock-free structure and uses explicit object lifetime management.
-MPMC and reclamation structures do not exist yet.
+The MPMC queue is the first multi-producer, multi-consumer structure and uses the Vyukov
+sequence-number ring scheme with documented weak-semantics tradeoffs.
+Memory reclamation structures do not exist yet.
 
 The local Apple `g++` command resolves to Apple Clang, not GNU GCC.
 Real GNU GCC verification was performed with GCC 13.3.0 on Ubuntu 24.04 LTS (aarch64) inside a disposable Lima VM: default, release, ASan, UBSan, and TSan configurations all pass with strict warnings promoted to errors.
@@ -32,6 +35,7 @@ To record benchmark metadata alongside Google Benchmark JSON output:
 cmake --preset release
 cmake --build --preset release
 python3 tools/run_benchmark.py --output results/mutex-queue.json --compiler c++ --build-type Release
+python3 tools/run_benchmark.py --binary build/release/norn_mpmc_benchmarks --output results/mpmc.json --compiler c++ --build-type Release
 ```
 
 ## Roadmap

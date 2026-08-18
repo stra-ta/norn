@@ -7,6 +7,8 @@
 #include <optional>
 #include <utility>
 
+#include "norn/cache_line.hpp"
+
 namespace norn {
 
 // Bounded SPSC queue.
@@ -17,21 +19,8 @@ struct spsc_index {
   std::atomic<std::size_t> value{0};
 };
 
-#if defined(__cpp_lib_hardware_interference_size)
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winterference-size"
-#endif
-inline constexpr std::size_t spsc_cache_line_size = std::hardware_destructive_interference_size;
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
-#else
-inline constexpr std::size_t spsc_cache_line_size = 64;
-#endif
-
 template <>
-struct alignas(spsc_cache_line_size) spsc_index<true> {
+struct alignas(cache_line_size) spsc_index<true> {
   std::atomic<std::size_t> value{0};
 };
 
