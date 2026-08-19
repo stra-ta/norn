@@ -24,7 +24,7 @@ Every step has tests, design notes, and an explanation of the tradeoffs.
 | `mpsc_queue<T>` | Multiple producers, one consumer | Heap nodes | Hazard-pointer protection and deferred reclamation |
 
 The bounded queues avoid individual node allocation and reclamation.
-The hazard-pointer queue pays that cost deliberately so the lifetime problem is visible in code and tests.****
+The hazard-pointer queue pays that cost deliberately so the lifetime problem is visible in code and tests.
 
 ## Lifecycles
 
@@ -108,12 +108,15 @@ Catch2 and Google Benchmark are fetched by CMake from pinned source archives wit
 The repository includes Debug, Release, ASan, UBSan, and TSan presets:
 
 ```sh
+cmake --preset asan
 cmake --build --preset asan
 ctest --preset asan --output-on-failure
 
+cmake --preset ubsan
 cmake --build --preset ubsan
 ctest --preset ubsan --output-on-failure
 
+cmake --preset tsan
 cmake --build --preset tsan
 ctest --preset tsan --output-on-failure
 ```
