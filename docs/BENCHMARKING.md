@@ -21,5 +21,13 @@ The result is hardware- and topology-dependent, so padding is retained only if t
 `tools/run_benchmark.py` wraps Google Benchmark JSON with git, compiler, operating-system, architecture, CPU, build, capacity, and producer/consumer metadata.
 Google Benchmark supports JSON/CSV formats, repetitions, and warmup controls.
 
-Future measurements will record machine, compiler, flags, topology, configuration, git revision, warmup policy, repetitions, and raw machine-readable output.
+M7 adds the hazard-pointer queue to the comparison.
+The HP queue is unbounded and allocates individual heap nodes, so it incurs per-node
+allocation, hazard publication fences, and scan overhead on every pop.
+On the local test machine, the HP queue runs at roughly twice the latency of the
+bounded SPSC ring buffer for a 100,000-item batch, which is the expected cost of
+the reclamation machinery.
+These numbers are not performance claims; they are the first data point for the
+educational comparison.
+
 Performance claims will be tied to a hypothesis and measured on explicitly identified hardware.
