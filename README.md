@@ -4,14 +4,13 @@ C++20 concurrency structures with an emphasis on memory-model correctness, measu
 
 ## Status
 
-**M6 - hazard-pointer reclamation**
+**M8 - architecture and performance writeup**
 
-The repository contains unbounded and bounded mutex queues, a bounded SPSC ring buffer,
-a bounded MPMC ring queue, and hazard-pointer reclamation.
-The hazard-pointer library provides a domain, per-thread records with guarded slots,
-an RAII guard, and a demonstration Michael-Scott queue that exercises the full
-publication-scan-retire lifecycle.
-Memory reclamation structures are implemented and documented.
+The repository contains mutex reference queues, bounded SPSC and MPMC ring buffers,
+and hazard-pointer reclamation for an unbounded MPSC queue.
+The project scope is complete.
+`docs/ARCHITECTURE_WRITEUP.md` provides the full architecture, performance comparison,
+and design rationale.
 
 M5 is a correctness campaign, not a feature: parameterized exactly-once and 1P1C FIFO
 histories, deterministic demonstrations of the MPMC reservation-hole progress
