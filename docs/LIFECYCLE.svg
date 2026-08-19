@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="auto" viewBox="0 0 1280 660" preserveAspectRatio="xMidYMin meet" role="img" aria-labelledby="title desc">
+  <title id="title">Norn queue lifecycles</title>
+  <desc id="desc">The bounded ring lifecycle is reserve, publish, consume, and reuse. The hazard-pointer lifecycle is protect, validate, access, retire, scan, and reclaim, with deferred reclamation when a hazard is active.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#93643a"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#52727b"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a14f45"/>
+    </marker>
+    <style>
+      .canvas { fill: #fbfaf7; }
+      .title { fill: #20262d; font: 700 29px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .subtitle { fill: #69727a; font: 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .panel { fill: #f0eee9; stroke: #c7c1b8; stroke-width: 1.5; rx: 16; }
+      .panel-title { fill: #20262d; font: 700 19px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .panel-subtitle { fill: #69727a; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .node rect { fill: #ffffff; stroke: #2e3942; stroke-width: 2; rx: 10; }
+      .node .label { fill: #20262d; font: 700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-anchor: middle; }
+      .node .detail { fill: #69727a; font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-anchor: middle; }
+      .flow { fill: none; stroke: #93643a; stroke-width: 2.5; marker-end: url(#arrow); }
+      .flow-blue { fill: none; stroke: #52727b; stroke-width: 2.5; marker-end: url(#arrow-blue); }
+      .flow-red { fill: none; stroke: #a14f45; stroke-width: 2; stroke-dasharray: 6 5; marker-end: url(#arrow-red); }
+      .note { fill: #ffffff; stroke: #a14f45; stroke-width: 1.5; rx: 10; }
+      .note-label { fill: #7f3c36; font: 700 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-anchor: middle; }
+      .note-detail { fill: #69727a; font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <rect class="canvas" width="1280" height="660"/>
+  <text class="title" x="48" y="56">NORN  /  LIFECYCLES</text>
+  <text class="subtitle" x="48" y="84">publication is not the same problem as reclamation</text>
+
+  <rect class="panel" x="40" y="122" width="570" height="455"/>
+  <text class="panel-title" x="72" y="164">Bounded ring</text>
+  <text class="panel-subtitle" x="72" y="188">fixed slots, atomic ownership handoff</text>
+
+  <g class="node">
+    <rect x="72" y="235" width="205" height="78"/>
+    <text class="label" x="174" y="267">reserve</text>
+    <text class="detail" x="174" y="289">CAS / owned index</text>
+  </g>
+  <g class="node">
+    <rect x="333" y="235" width="205" height="78"/>
+    <text class="label" x="435" y="267">publish</text>
+    <text class="detail" x="435" y="289">release store</text>
+  </g>
+  <g class="node">
+    <rect x="333" y="382" width="205" height="78"/>
+    <text class="label" x="435" y="414">consume</text>
+    <text class="detail" x="435" y="436">acquire load</text>
+  </g>
+  <g class="node">
+    <rect x="72" y="382" width="205" height="78"/>
+    <text class="label" x="174" y="414">reuse</text>
+    <text class="detail" x="174" y="436">release slot</text>
+  </g>
+  <path class="flow" d="M 277 274 H 327"/>
+  <path class="flow" d="M 435 313 V 376"/>
+  <path class="flow" d="M 333 421 H 283"/>
+  <path class="flow" d="M 174 382 V 319"/>
+  <rect class="note" x="98" y="500" width="420" height="50"/>
+  <text class="note-label" x="308" y="522">stall behavior</text>
+  <text class="note-detail" x="308" y="540">producer hole → false-empty · consumer hole → false-full</text>
+
+  <rect class="panel" x="670" y="122" width="570" height="455"/>
+  <text class="panel-title" x="702" y="164">Hazard-pointer queue</text>
+  <text class="panel-subtitle" x="702" y="188">heap nodes, protected access, deferred free</text>
+
+  <g class="node">
+    <rect x="702" y="235" width="205" height="78"/>
+    <text class="label" x="804" y="267">protect</text>
+    <text class="detail" x="804" y="289">publish hazard</text>
+  </g>
+  <g class="node">
+    <rect x="963" y="235" width="205" height="78"/>
+    <text class="label" x="1065" y="267">validate</text>
+    <text class="detail" x="1065" y="289">source unchanged?</text>
+  </g>
+  <g class="node">
+    <rect x="963" y="382" width="205" height="78"/>
+    <text class="label" x="1065" y="414">access</text>
+    <text class="detail" x="1065" y="436">read protected node</text>
+  </g>
+  <g class="node">
+    <rect x="702" y="382" width="205" height="78"/>
+    <text class="label" x="804" y="414">retire</text>
+    <text class="detail" x="804" y="436">after unlink</text>
+  </g>
+  <path class="flow-blue" d="M 907 274 H 957"/>
+  <path class="flow-blue" d="M 1065 313 V 376"/>
+  <path class="flow-blue" d="M 963 421 H 913"/>
+  <path class="flow-blue" d="M 804 382 V 319"/>
+  <g class="node">
+    <rect x="700" y="500" width="205" height="50"/>
+    <text class="label" x="802" y="531">scan → reclaim</text>
+  </g>
+  <path class="flow-blue" d="M 804 460 V 494"/>
+  <rect class="note" x="973" y="500" width="185" height="50"/>
+  <text class="note-label" x="1065" y="522">hazard still held</text>
+  <text class="note-detail" x="1065" y="540">defer reclaim</text>
+  <path class="flow-red" d="M 1065 460 V 494"/>
+</svg>

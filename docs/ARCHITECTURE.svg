@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="auto" viewBox="0 0 1280 620" preserveAspectRatio="xMidYMin meet" role="img" aria-labelledby="title desc">
+  <title id="title">Norn architecture</title>
+  <desc id="desc">Norn progresses from mutex reference queues to bounded SPSC and MPMC rings, then to an unbounded MPSC queue using hazard-pointer reclamation. Correctness and benchmark evidence span the structures.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#93643a"/>
+    </marker>
+    <style>
+      .canvas { fill: #fbfaf7; }
+      .title { fill: #20262d; font: 700 29px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .subtitle { fill: #69727a; font: 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .group { fill: #f0eee9; stroke: #c7c1b8; stroke-width: 1.5; rx: 16; }
+      .group-title { fill: #69727a; font: 700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+      .node rect { fill: #ffffff; stroke: #2e3942; stroke-width: 2; rx: 12; }
+      .node .label { fill: #20262d; font: 700 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-anchor: middle; }
+      .node .detail { fill: #69727a; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-anchor: middle; }
+      .node .number { fill: #93643a; font: 700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .flow { fill: none; stroke: #93643a; stroke-width: 2.5; marker-end: url(#arrow); }
+      .evidence rect { fill: #ffffff; stroke: #52727b; stroke-width: 1.8; rx: 10; }
+      .evidence .label { fill: #20262d; font: 700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-anchor: middle; }
+      .evidence .detail { fill: #69727a; font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <rect class="canvas" width="1280" height="620"/>
+  <text class="title" x="48" y="56">NORN  /  CONCURRENCY STRUCTURES</text>
+  <text class="subtitle" x="48" y="84">reference queues → bounded rings → node reclamation</text>
+
+  <rect class="group" x="40" y="122" width="770" height="252"/>
+  <text class="group-title" x="70" y="153">bounded storage</text>
+
+  <g class="node">
+    <rect x="70" y="190" width="205" height="105"/>
+    <text class="number" x="88" y="214">01</text>
+    <text class="label" x="172" y="239">mutex baselines</text>
+    <text class="detail" x="172" y="263">reference behavior</text>
+    <text class="detail" x="172" y="282">close + drain</text>
+  </g>
+  <g class="node">
+    <rect x="320" y="190" width="205" height="105"/>
+    <text class="number" x="338" y="214">02</text>
+    <text class="label" x="422" y="239">SPSC rings</text>
+    <text class="detail" x="422" y="263">owned indices</text>
+    <text class="detail" x="422" y="282">false sharing</text>
+  </g>
+  <g class="node">
+    <rect x="570" y="190" width="205" height="105"/>
+    <text class="number" x="588" y="214">03</text>
+    <text class="label" x="672" y="239">MPMC ring</text>
+    <text class="detail" x="672" y="263">sequence numbers</text>
+    <text class="detail" x="672" y="282">CAS reservation</text>
+  </g>
+  <path class="flow" d="M 275 242 H 315"/>
+  <path class="flow" d="M 525 242 H 565"/>
+
+  <rect class="group" x="850" y="122" width="390" height="252"/>
+  <text class="group-title" x="880" y="153">unbounded storage</text>
+  <g class="node">
+    <rect x="900" y="190" width="290" height="105"/>
+    <text class="number" x="918" y="214">04</text>
+    <text class="label" x="1045" y="239">hazard-pointer queue</text>
+    <text class="detail" x="1045" y="263">heap nodes</text>
+    <text class="detail" x="1045" y="282">protect → retire → reclaim</text>
+  </g>
+  <path class="flow" d="M 775 242 H 895"/>
+
+  <text class="group-title" x="48" y="423">evidence around the design</text>
+  <g class="evidence">
+    <rect x="48" y="450" width="270" height="105"/>
+    <text class="label" x="183" y="482">memory model</text>
+    <text class="detail" x="183" y="508">release / acquire</text>
+    <text class="detail" x="183" y="529">linearization notes</text>
+  </g>
+  <g class="evidence">
+    <rect x="348" y="450" width="270" height="105"/>
+    <text class="label" x="483" y="482">correctness</text>
+    <text class="detail" x="483" y="508">33 tests</text>
+    <text class="detail" x="483" y="529">ASan / UBSan / TSan</text>
+  </g>
+  <g class="evidence">
+    <rect x="648" y="450" width="270" height="105"/>
+    <text class="label" x="783" y="482">benchmarks</text>
+    <text class="detail" x="783" y="508">bounded vs unbounded</text>
+    <text class="detail" x="783" y="529">named hardware</text>
+  </g>
+  <g class="evidence">
+    <rect x="948" y="450" width="270" height="105"/>
+    <text class="label" x="1083" y="482">platforms</text>
+    <text class="detail" x="1083" y="508">macOS ARM64</text>
+    <text class="detail" x="1083" y="529">Linux GCC + CI x86-64</text>
+  </g>
+</svg>
