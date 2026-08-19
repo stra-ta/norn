@@ -4,14 +4,14 @@ C++20 concurrency structures with an emphasis on memory-model correctness, measu
 
 ## Status
 
-**M5 - concurrency correctness campaign**
+**M6 - hazard-pointer reclamation**
 
 The repository contains unbounded and bounded mutex queues, a bounded SPSC ring buffer,
-and a bounded MPMC ring queue.
-The SPSC queue is the first lock-free structure and uses explicit object lifetime management.
-The MPMC queue is the first multi-producer, multi-consumer structure and uses the Vyukov
-sequence-number ring scheme with documented weak-semantics tradeoffs.
-Memory reclamation structures do not exist yet.
+a bounded MPMC ring queue, and hazard-pointer reclamation.
+The hazard-pointer library provides a domain, per-thread records with guarded slots,
+an RAII guard, and a demonstration Michael-Scott queue that exercises the full
+publication-scan-retire lifecycle.
+Memory reclamation structures are implemented and documented.
 
 M5 is a correctness campaign, not a feature: parameterized exactly-once and 1P1C FIFO
 histories, deterministic demonstrations of the MPMC reservation-hole progress
