@@ -5,12 +5,56 @@
 
 Norn is a C++20 concurrency lab for building, measuring, and explaining queues under the C++ memory model.
 
-
 It starts with simple mutex-backed queues, moves through bounded SPSC and MPMC rings, and ends with an unbounded node-based queue that needs hazard-pointer reclamation.
 
 Every step has tests, design notes, and an explanation of the tradeoffs.
 
 ![Norn architecture](docs/ARCHITECTURE.svg)
+
+## Build and test
+
+Requirements:
+
+- CMake 3.25 or newer.
+- Make or Ninja.
+- A C++20 compiler.
+
+Build the default configuration and run the full test suite:
+
+```sh
+cmake --preset default
+cmake --build --preset default
+ctest --preset default --output-on-failure
+```
+
+Project warnings are errors by default for GCC and Clang:
+
+```text
+-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
+```
+
+Catch2 and Google Benchmark are fetched by CMake from pinned source archives with verified hashes.
+
+### Sanitizers
+
+The repository includes Debug, Release, ASan, UBSan, and TSan presets:
+
+```sh
+cmake --preset asan
+cmake --build --preset asan
+ctest --preset asan --output-on-failure
+
+cmake --preset ubsan
+cmake --build --preset ubsan
+ctest --preset ubsan --output-on-failure
+
+cmake --preset tsan
+cmake --build --preset tsan
+ctest --preset tsan --output-on-failure
+```
+
+GCC's ThreadSanitizer does not support `std::atomic_thread_fence` in this setup.
+Apple Clang TSan and the other GCC sanitizer configurations are covered by the verification work.
 
 ## What Norn contains
 
@@ -25,6 +69,56 @@ Every step has tests, design notes, and an explanation of the tradeoffs.
 
 The bounded queues avoid individual node allocation and reclamation.
 The hazard-pointer queue pays that cost deliberately so the lifetime problem is visible in code and tests.
+
+## Benchmarks
+
+Measured on an Apple M1 with Apple Clang 21.0.0 at commit `5d73d0eb`, Release build, batch size 100,000 items.
+Throughput is items per second from the harness; per-item cost is derived from the same value so the two columns agree.
+
+| Structure | Configuration | ns/item | ops/s |
+| --- | --- | --- | --- |
+| Bounded mutex queue | single-thread push/pop | 68.1 | 14.68M |
+| SPSC ring | unpadded | 73.3 | 13.64M |
+| SPSC ring | padded (cache-line separated) | 59.5 | 16.81M |
+| MPMC ring | 1x1 | 32.7 | 30.56M |
+| MPMC ring | 2x2 | 152.7 | 6.55M |
+| MPMC ring | 4x4 | 168.2 | 5.95M |
+| Hazard-pointer queue | MPSC, 1x1 | 194.6 | 5.14M |
+
+Build the Release benchmarks:
+
+```sh
+cmake --preset release
+cmake --build --preset release
+```
+
+The main comparison binary includes the bounded mutex baseline, unpadded and padded SPSC queues, and the hazard-pointer queue:
+
+```sh
+python3 tools/run_benchmark.py \
+  --binary build/release/norn_benchmarks \
+  --output results/queue-comparison.json \
+  --compiler c++ \
+  --build-type Release
+```
+
+The bounded MPMC configurations have their own benchmark binary:
+
+```sh
+python3 tools/run_benchmark.py \
+  --binary build/release/norn_mpmc_benchmarks \
+  --output results/mpmc.json \
+  --compiler c++ \
+  --build-type Release
+```
+
+Thread creation, retry loops, and scheduler yields are part of the timed workload.
+The numbers compare designs on this machine, not absolute cycles-per-operation claims.
+
+The expected shape shows up: padded SPSC beats unpadded, consistent with the cache-line-separation hypothesis, and the hazard-pointer queue runs about 2.6x the unpadded SPSC ring per item because it allocates nodes and publishes hazard pointers on the pop path.
+MPMC 1x1 is the fastest single-pair config; throughput drops as producer and consumer threads contend.
+
+Full results and metadata in [docs/BENCHMARK_RESULTS.md](docs/BENCHMARK_RESULTS.md).
 
 ## Lifecycles
 
@@ -79,85 +173,6 @@ A retired node is reclaimed only after a scan finds no active hazard pointer for
 The hazard-pointer demonstration is MPSC rather than MPMC.
 That keeps the reclamation example focused while the bounded MPMC ring covers the many-to-many case.
 
-## Build and test
-
-Requirements:
-
-- CMake 3.25 or newer.
-- Make or Ninja.
-- A C++20 compiler.
-
-Build the default configuration and run the full test suite:
-
-```sh
-cmake --preset default
-cmake --build --preset default
-ctest --preset default --output-on-failure
-```
-
-Project warnings are errors by default for GCC and Clang:
-
-```text
--Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
-```
-
-Catch2 and Google Benchmark are fetched by CMake from pinned source archives with verified hashes.
-
-### Sanitizers
-
-The repository includes Debug, Release, ASan, UBSan, and TSan presets:
-
-```sh
-cmake --preset asan
-cmake --build --preset asan
-ctest --preset asan --output-on-failure
-
-cmake --preset ubsan
-cmake --build --preset ubsan
-ctest --preset ubsan --output-on-failure
-
-cmake --preset tsan
-cmake --build --preset tsan
-ctest --preset tsan --output-on-failure
-```
-
-GCC's ThreadSanitizer does not support `std::atomic_thread_fence` in this setup.
-Apple Clang TSan and the other GCC sanitizer configurations are covered by the verification work.
-
-## Benchmarks
-
-Build the Release benchmarks:
-
-```sh
-cmake --preset release
-cmake --build --preset release
-```
-
-The main comparison binary includes the bounded mutex baseline, unpadded and padded SPSC queues, and the hazard-pointer queue:
-
-```sh
-python3 tools/run_benchmark.py \
-  --binary build/release/norn_benchmarks \
-  --output results/queue-comparison.json \
-  --compiler c++ \
-  --build-type Release
-```
-
-The bounded MPMC configurations have their own benchmark binary:
-
-```sh
-python3 tools/run_benchmark.py \
-  --binary build/release/norn_mpmc_benchmarks \
-  --output results/mpmc.json \
-  --compiler c++ \
-  --build-type Release
-```
-
-Thread creation, queue construction, retry loops, joins, and scheduler yields are part of the timed workload.
-The comparison is useful for understanding design costs, not for claiming universal nanoseconds-per-operation numbers.
-
-The first local comparison showed the expected shape: the hazard-pointer queue was roughly twice as slow as the bounded SPSC ring buffer because it allocates nodes and publishes hazard pointers on the pop path.
-
 ## Verification
 
 The current suite contains 33 tests covering:
@@ -188,6 +203,7 @@ Local Linux verification uses a disposable ARM64 Lima copy of the source tree.
 - [`docs/CORRECTNESS_CAMPAIGN.md`](docs/CORRECTNESS_CAMPAIGN.md): parameterized histories, progress demonstrations, and results.
 - [`docs/MEMORY_MODEL.md`](docs/MEMORY_MODEL.md): synchronization and linearization notes.
 - [`docs/BENCHMARKING.md`](docs/BENCHMARKING.md): benchmark methodology and caveats.
+- [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md): measured metrics and environment.
 - [`docs/INTERVIEW_NOTES.md`](docs/INTERVIEW_NOTES.md): questions grounded in the implementation.
 
 ## Limitations
