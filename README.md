@@ -194,7 +194,7 @@ The project has been verified with:
 GitHub Actions runs the native x86-64 build matrix and sanitizer jobs.
 Local Linux verification uses a disposable ARM64 Lima copy of the source tree.
 
-## Other notes
+## Documentation
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): milestone scope and project boundaries.
 - [`docs/ARCHITECTURE_WRITEUP.md`](docs/ARCHITECTURE_WRITEUP.md): the complete architecture and performance overview.
