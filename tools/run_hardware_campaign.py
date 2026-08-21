@@ -127,11 +127,19 @@ def choose_placement(placement: str, topology: dict[str, object]) -> tuple[list[
     if placement == "distinct-core":
         first = allowed[0]
         first_info = cpus.get(str(first), {})
+        first_package = first_info.get("package_id")
+        first_core = first_info.get("core_id")
+        if not isinstance(first_package, str) or not first_package or not isinstance(first_core, str) or not first_core:
+            return [], [], "incomplete CPU core topology"
         for candidate in allowed[1:]:
             candidate_info = cpus.get(str(candidate), {})
+            candidate_package = candidate_info.get("package_id")
+            candidate_core = candidate_info.get("core_id")
             if (
-                candidate_info.get("package_id") == first_info.get("package_id")
-                and candidate_info.get("core_id") != first_info.get("core_id")
+                candidate_package == first_package
+                and candidate_core != first_core
+                and isinstance(candidate_core, str)
+                and candidate_core
             ):
                 return [first], [candidate], None
         return [], [], "no distinct physical cores in one package are available"
@@ -145,8 +153,11 @@ def choose_placement(placement: str, topology: dict[str, object]) -> tuple[list[
     if placement == "cross-package":
         first = allowed[0]
         first_package = cpus.get(str(first), {}).get("package_id")
+        if not isinstance(first_package, str) or not first_package:
+            return [], [], "incomplete CPU package topology"
         for candidate in allowed[1:]:
-            if cpus.get(str(candidate), {}).get("package_id") != first_package:
+            candidate_package = cpus.get(str(candidate), {}).get("package_id")
+            if isinstance(candidate_package, str) and candidate_package and candidate_package != first_package:
                 return [first], [candidate], None
         return [], [], "no allowed cross-package CPU pair"
     return [], [], f"unknown placement {placement}"
@@ -204,7 +215,10 @@ def run_case(command: list[str], perf: bool) -> tuple[dict[str, object] | None, 
         "perf": {"available": events, "unavailable": unavailable, "counters": parse_perf(completed.stderr)},
     }
     if completed.returncode != 0:
-        return None, metadata
+        raw, fallback = run_case(command, perf=False)
+        metadata["fallback"] = fallback
+        metadata["perf"]["combined_run_status"] = "failed"
+        return raw, metadata
     return json.loads(completed.stdout), metadata
 
 
@@ -259,6 +273,7 @@ def main() -> int:
     parser.add_argument("--repetitions", type=int)
     parser.add_argument("--seed", type=int, default=20260822)
     parser.add_argument("--perf", action="store_true")
+    parser.add_argument("--require-complete", action="store_true")
     args = parser.parse_args()
 
     manifest = json.loads(Path(args.manifest).read_text())
@@ -328,6 +343,8 @@ def main() -> int:
             "records": records,
         },
     )
+    if args.require_complete and any(record["status"] != "complete" for record in records):
+        return 1
     return 0
 
 

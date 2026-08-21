@@ -180,7 +180,7 @@ That keeps the reclamation example focused while the bounded MPMC ring covers th
 
 ## Verification
 
-The current suite contains 33 tests covering:
+The current suite contains 37 tests covering:
 
 - Mutex queue behavior, close-and-drain semantics, and bounded capacity.
 - SPSC boundaries, wraparound, move-only values, and two-thread transfer.

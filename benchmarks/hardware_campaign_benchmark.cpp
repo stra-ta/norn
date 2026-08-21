@@ -80,7 +80,8 @@ struct backoff {
         }
         return;
       case backoff_mode::exponential: {
-        const std::size_t steps = std::min<std::size_t>(failures_, 64U);
+        const std::size_t exponent = std::min<std::size_t>(failures_ - 1U, 6U);
+        const std::size_t steps = std::size_t{1} << exponent;
         for (std::size_t step = 0; step < steps; ++step) {
           std::atomic_signal_fence(std::memory_order_seq_cst);
         }
@@ -302,7 +303,13 @@ std::pair<std::vector<sample>, std::vector<norn::benchmark_support::affinity_res
                 ++local.pops;
                 retry.succeeded();
               } else if (producers_finished.load(std::memory_order_acquire) == config.producers) {
-                break;
+                auto final_value = queue->try_pop();
+                if (final_value.has_value()) {
+                  ++local.pops;
+                  retry.succeeded();
+                } else {
+                  break;
+                }
               } else {
                 retry.failed(local);
               }

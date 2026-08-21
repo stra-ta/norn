@@ -29,6 +29,7 @@ jobs:
           --output results/hardware/ci-smoke.json
           --case h3-spsc-unpadded-unpinned
           --repetitions 3
+          --require-complete
 
   sanitizers:
     strategy:

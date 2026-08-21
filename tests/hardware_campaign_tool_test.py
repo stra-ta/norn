@@ -3,6 +3,8 @@
 
 import importlib.util
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -45,6 +47,21 @@ class HardwareCampaignToolTest(unittest.TestCase):
         _, _, reason = CAMPAIGN.choose_placement("distinct-core", {"allowed_cpus": [], "cpus": {}})
         self.assertEqual(reason, "Linux topology is unavailable")
 
+    def test_partial_topology_never_claims_a_core_or_package_relationship(self) -> None:
+        topology = {
+            "allowed_cpus": [0, 1],
+            "cpus": {
+                "0": {"core_id": None, "package_id": None, "thread_siblings": [0]},
+                "1": {"core_id": None, "package_id": None, "thread_siblings": [1]},
+            },
+        }
+        self.assertEqual(
+            CAMPAIGN.choose_placement("distinct-core", topology)[2], "incomplete CPU core topology"
+        )
+        self.assertEqual(
+            CAMPAIGN.choose_placement("cross-package", topology)[2], "incomplete CPU package topology"
+        )
+
     def test_atomic_write_retains_every_repetition(self) -> None:
         content = {"records": [{"raw": {"samples": [{"complete": True}, {"complete": True}]}}]}
         with tempfile.TemporaryDirectory() as directory:
@@ -68,6 +85,24 @@ class HardwareCampaignToolTest(unittest.TestCase):
                 {"id": "skipped", "status": "skipped", "reason": "unsupported"},
             ],
         )
+
+    def test_require_complete_fails_for_an_inconclusive_case(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "tools" / "run_hardware_campaign.py"),
+                    "--binary",
+                    "/usr/bin/false",
+                    "--output",
+                    str(Path(directory) / "campaign.json"),
+                    "--case",
+                    "h3-spsc-unpadded-unpinned",
+                    "--require-complete",
+                ],
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 1)
 
 
 if __name__ == "__main__":
