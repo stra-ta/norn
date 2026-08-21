@@ -120,6 +120,11 @@ MPMC 1x1 is the fastest single-pair config; throughput drops as producer and con
 
 Full results and metadata in [docs/BENCHMARK_RESULTS.md](docs/BENCHMARK_RESULTS.md).
 
+The legacy table measures the original harness and is not a universal hardware claim.
+The focused hardware campaign adds persistent-worker measurements, Linux affinity read-back, retry and scheduler accounting, and safe seq_cst comparison cases.
+Its first native M1 pilot favors padded SPSC under scheduler-managed placement, while the virtualized Linux ARM64 pilot does not reproduce that direction.
+Read [docs/HARDWARE_PERFORMANCE.md](docs/HARDWARE_PERFORMANCE.md) for methodology, raw-result locations, results, and caveats.
+
 ## Lifecycles
 
 ![Queue lifecycles](docs/LIFECYCLE.svg)
@@ -204,6 +209,7 @@ Local Linux verification uses a disposable ARM64 Lima copy of the source tree.
 - [`docs/MEMORY_MODEL.md`](docs/MEMORY_MODEL.md): synchronization and linearization notes.
 - [`docs/BENCHMARKING.md`](docs/BENCHMARKING.md): benchmark methodology and caveats.
 - [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md): measured metrics and environment.
+- [`docs/HARDWARE_PERFORMANCE.md`](docs/HARDWARE_PERFORMANCE.md): affinity, false sharing, contention, backoff, ordering, and counter evidence.
 - [`docs/INTERVIEW_NOTES.md`](docs/INTERVIEW_NOTES.md): questions grounded in the implementation.
 
 ## Limitations
@@ -212,6 +218,7 @@ Local Linux verification uses a disposable ARM64 Lima copy of the source tree.
 - The hazard-pointer demonstration is MPSC, not MPMC.
 - Benchmark setup is part of the timed workload.
 - Native x86-64 verification comes from GitHub Actions; local Linux verification is ARM64.
+- The Linux ARM64 hardware pilot is virtualized, and GitHub Actions is a functional smoke gate rather than a performance environment.
 - This is an educational concurrency project, not a drop-in production queue library.
 
 ## License

@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "commit": "1ac6dcd1edee5341c5189a39fd29800cd2cdd9bd",
+  "method": {
+    "items_per_producer": 100000,
+    "warmups": 2,
+    "repetitions": 9,
+    "order_seed": 20260822,
+    "build_type": "Release",
+    "affinity": "Linux read-back required when requested"
+  },
+  "m1_native": {
+    "environment": "Apple M1, macOS 26.5.2, Apple Clang 21.0.0, 8 physical and 8 logical CPUs",
+    "label": "native hardware, scheduler-managed placement",
+    "spsc_median_items_per_second": {
+      "unpadded": 9557602.47542,
+      "padded": 29921459.1618,
+      "seq_cst": 7049658.64143
+    },
+    "mpmc_median_items_per_second": {
+      "1x1": 76064889.4359,
+      "2x2": 8959386.1172,
+      "4x4_tight": 5060654.09005,
+      "4x4_yield": 7210969.64431,
+      "4x4_bounded": 7138963.6031,
+      "4x4_exponential": 7397241.95313
+    },
+    "perf": "unavailable"
+  },
+  "linux_arm64_vm": {
+    "environment": "Lima Apple Virtualization VM, Ubuntu kernel 7.0.0-28-generic, GCC 15.2.0, 4 vCPUs",
+    "label": "virtualized functional and scheduler evidence only",
+    "spsc_median_items_per_second": {
+      "unpadded": 6572275.21192,
+      "padded": 5556929.04318,
+      "padded_same_cpu": 169212.743986,
+      "padded_distinct_core": 9612705.99789,
+      "seq_cst": 12063990.785
+    },
+    "mpmc_median_items_per_second": {
+      "1x1": 68964803.8124,
+      "2x2": 10118627.2443,
+      "4x4_tight": 6897674.38011,
+      "4x4_yield": 10518877.2824,
+      "4x4_bounded": 16083475.8128,
+      "4x4_exponential": 13999688.1569,
+      "2x2_distinct_core": 77406450.4343
+    },
+    "perf": "unavailable: perf_event_paranoid=4"
+  },
+  "limitations": [
+    "The native M1 host was loaded during the pilot, so its large sample spread makes the padding effect exploratory.",
+    "The Linux result is virtualized and has no SMT or cross-package topology, so it cannot establish physical-cache or NUMA causality.",
+    "No x86-64 performance sample was collected.",
+    "No perf counters were available, so retry counts and process rusage are not a decomposition into instructions, cache misses, or migrations."
+  ]
+}
