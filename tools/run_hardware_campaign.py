@@ -101,6 +101,7 @@ def environment() -> dict[str, object]:
         data["lscpu"] = command_output(["lscpu", "--json"])
         data["virtualization"] = command_output(["systemd-detect-virt", "--vm"])
         data["virtualized"] = data["virtualization"] not in (None, "none")
+        data["perf_event_paranoid"] = file_text(Path("/proc/sys/kernel/perf_event_paranoid"))
     elif platform.system() == "Darwin":
         data["topology"] = macos_metadata()
         data["virtualized"] = False
@@ -163,7 +164,11 @@ def perf_available_events() -> tuple[list[str], dict[str, str]]:
         if completed.returncode == 0:
             available.append(event)
         else:
-            unavailable[event] = completed.stderr.strip() or "unsupported-or-permission-denied"
+            unavailable[event] = (
+                "permission-denied"
+                if "Access to performance monitoring" in completed.stderr
+                else "unsupported-or-unavailable"
+            )
     return available, unavailable
 
 
