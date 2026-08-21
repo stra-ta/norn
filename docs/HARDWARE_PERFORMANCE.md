@@ -113,7 +113,7 @@ The consumer destroys the payload before the read-index publication store, and t
 
 Replacing those acquire and release operations with `seq_cst` strengthens, rather than weakens, the required happens-before edges and leaves the linearization points unchanged.
 Owner-local index loads remain relaxed because no other thread writes that index.
-The experiment has basic, FIFO, two-thread transfer, sanitizer, and stress-suite coverage.
+The experiment has basic, FIFO, two-thread transfer, and sanitizer coverage.
 There is no relaxed experimental variant in the normal benchmark targets.
 
 ## Perf and counter availability
