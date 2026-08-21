@@ -235,6 +235,21 @@ def atomic_write(path: Path, content: dict[str, object]) -> None:
     temporary_path.replace(path)
 
 
+def campaign_summary(records: list[dict[str, object]]) -> list[dict[str, object]]:
+    compact: list[dict[str, object]] = []
+    for record in records:
+        entry: dict[str, object] = {
+            "id": record["case"]["id"],
+            "status": record["status"],
+        }
+        if "reason" in record:
+            entry["reason"] = record["reason"]
+        if "summary" in record:
+            entry.update(record["summary"])
+        compact.append(entry)
+    return compact
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", default="build/release/norn_hardware_benchmarks")
@@ -309,6 +324,7 @@ def main() -> int:
             "manifest": manifest,
             "environment": machine,
             "order_seed": args.seed,
+            "campaign_summary": campaign_summary(records),
             "records": records,
         },
     )

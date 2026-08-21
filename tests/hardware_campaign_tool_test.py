@@ -52,6 +52,23 @@ class HardwareCampaignToolTest(unittest.TestCase):
             CAMPAIGN.atomic_write(output, content)
             self.assertEqual(json.loads(output.read_text()), content)
 
+    def test_campaign_summary_keeps_status_and_all_measurement_metadata(self) -> None:
+        records = [
+            {
+                "case": {"id": "complete"},
+                "status": "complete",
+                "summary": {"sample_count": 9, "all_complete": True},
+            },
+            {"case": {"id": "skipped"}, "status": "skipped", "reason": "unsupported"},
+        ]
+        self.assertEqual(
+            CAMPAIGN.campaign_summary(records),
+            [
+                {"id": "complete", "status": "complete", "sample_count": 9, "all_complete": True},
+                {"id": "skipped", "status": "skipped", "reason": "unsupported"},
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
