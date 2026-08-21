@@ -187,7 +187,9 @@ def run_case(command: list[str], perf: bool) -> tuple[dict[str, object] | None, 
         return json.loads(completed.stdout), metadata
     events, unavailable = perf_available_events()
     if not events:
-        return None, {"returncode": None, "perf": {"available": [], "unavailable": unavailable}}
+        raw, metadata = run_case(command, perf=False)
+        metadata["perf"] = {"available": [], "unavailable": unavailable}
+        return raw, metadata
     completed = subprocess.run(
         ["perf", "stat", "-x,", "-e", ",".join(events), "--", *command], text=True, capture_output=True
     )
