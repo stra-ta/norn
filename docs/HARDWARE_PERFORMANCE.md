@@ -11,7 +11,7 @@ Raw JSON is written atomically below ignored `results/hardware/<environment>/` p
 This avoids committing large traces or host-specific detail.
 The compact, curated pilot summary is [`docs/evidence/hardware/2026-08-22-pilot/summary.json`](evidence/hardware/2026-08-22-pilot/summary.json).
 
-The pilot started from clean commit `1ac6dcd1edee5341c5189a39fd29800cd2cdd9bd`.
+The pilot started from clean commit `6f4583454b23b80661a8cb51487903e86e939c04`.
 The baseline freeze was commit `64851af4a2a1667937e3a1cf1b526d0e66ce72dd`.
 At the freeze, default, Release, Debug, ASan, UBSan, and TSan built and passed all 33 existing tests on the native M1.
 The legacy benchmark run was recorded under `results/hardware/baseline-64851af4/`.
@@ -68,17 +68,17 @@ All values use the new steady-state harness, so they must not be compared direct
 
 | Case | Native M1 | Linux ARM64 VM | Interpretation |
 | --- | ---: | ---: | --- |
-| SPSC unpadded, unpinned | 9.56 | 6.57 | Both are scheduler-managed baseline cases. |
-| SPSC padded, unpinned | 29.92 | 5.56 | M1 pilot favors padding, but its wide spread and host load make the size exploratory. The VM does not reproduce the direction. |
+| SPSC unpadded, unpinned | 31.32 | 22.28 | Both are scheduler-managed baseline cases. |
+| SPSC padded, unpinned | 60.41 | 12.67 | M1 pilot favors padding, but its wide spread and host load make the size exploratory. The VM does not reproduce the direction. |
 | SPSC padded, same logical CPU | N/A | 0.17 | Time-sharing both roles on one vCPU is dramatically slower. This is scheduler evidence, not a cache-line comparison. |
-| SPSC padded, distinct cores | N/A | 9.61 | Pinning can change the VM result. Virtual topology prevents a physical-cache conclusion. |
-| SPSC seq_cst, unpinned | 7.05 | 12.06 | The two environments disagree on direction, so neither establishes a portable ordering-cost claim. |
-| MPMC 1x1 | 76.06 | 68.96 | Both pilots show a high single-pair baseline. |
-| MPMC 2x2 | 8.96 | 10.12 | Both pilots show a substantial contention cliff. |
-| MPMC 4x4, tight retry | 5.06 | 6.90 | Additional contenders reduce throughput further. |
-| MPMC 4x4, yield | 7.21 | 10.52 | Yielding can improve this loaded pilot, but it is not a universal winner. |
-| MPMC 4x4, bounded retry | 7.14 | 16.08 | The VM result is strong but virtualized and variable. |
-| MPMC 4x4, exponential retry | 7.40 | 14.00 | Same conclusion as bounded retry. |
+| SPSC padded, distinct cores | N/A | 18.54 | Pinning can change the VM result. Virtual topology prevents a physical-cache conclusion. |
+| SPSC seq_cst, unpinned | 22.78 | 25.12 | The two environments disagree on direction, so neither establishes a portable ordering-cost claim. |
+| MPMC 1x1 | 133.99 | 135.10 | Both pilots show a high single-pair baseline. |
+| MPMC 2x2 | 21.65 | 18.16 | Both pilots show a substantial contention cliff. |
+| MPMC 4x4, tight retry | 6.47 | 5.55 | Additional contenders reduce throughput further. |
+| MPMC 4x4, yield | 9.60 | 26.99 | Yielding can improve this loaded pilot, but it is not a universal winner. |
+| MPMC 4x4, bounded retry | 9.80 | 16.50 | The VM result is strong but virtualized and variable. |
+| MPMC 4x4, exponential retry | 11.57 | 17.38 | Same conclusion as bounded retry. |
 
 The native M1 pilot ran at a high host load and has broad sample spreads, including the padded SPSC case.
 The only supported native conclusion is that this workload had a repeatable-looking direction worth rerunning under controlled load.

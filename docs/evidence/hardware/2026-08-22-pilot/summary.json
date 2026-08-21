@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "commit": "1ac6dcd1edee5341c5189a39fd29800cd2cdd9bd",
+  "commit": "6f4583454b23b80661a8cb51487903e86e939c04",
   "method": {
     "items_per_producer": 100000,
     "warmups": 2,
@@ -13,17 +13,17 @@
     "environment": "Apple M1, macOS 26.5.2, Apple Clang 21.0.0, 8 physical and 8 logical CPUs",
     "label": "native hardware, scheduler-managed placement",
     "spsc_median_items_per_second": {
-      "unpadded": 9557602.47542,
-      "padded": 29921459.1618,
-      "seq_cst": 7049658.64143
+      "unpadded": 31317695.1554,
+      "padded": 60412301.8779,
+      "seq_cst": 22775582.8442
     },
     "mpmc_median_items_per_second": {
-      "1x1": 76064889.4359,
-      "2x2": 8959386.1172,
-      "4x4_tight": 5060654.09005,
-      "4x4_yield": 7210969.64431,
-      "4x4_bounded": 7138963.6031,
-      "4x4_exponential": 7397241.95313
+      "1x1": 133988447.516,
+      "2x2": 21646389.7718,
+      "4x4_tight": 6469054.93609,
+      "4x4_yield": 9595163.9606,
+      "4x4_bounded": 9795288.51031,
+      "4x4_exponential": 11567031.4388
     },
     "perf": "unavailable"
   },
@@ -31,20 +31,20 @@
     "environment": "Lima Apple Virtualization VM, Ubuntu kernel 7.0.0-28-generic, GCC 15.2.0, 4 vCPUs",
     "label": "virtualized functional and scheduler evidence only",
     "spsc_median_items_per_second": {
-      "unpadded": 6572275.21192,
-      "padded": 5556929.04318,
-      "padded_same_cpu": 169212.743986,
-      "padded_distinct_core": 9612705.99789,
-      "seq_cst": 12063990.785
+      "unpadded": 22277415.7574,
+      "padded": 12670349.6839,
+      "padded_same_cpu": 172123.108926,
+      "padded_distinct_core": 18538739.4769,
+      "seq_cst": 25124914.7951
     },
     "mpmc_median_items_per_second": {
-      "1x1": 68964803.8124,
-      "2x2": 10118627.2443,
-      "4x4_tight": 6897674.38011,
-      "4x4_yield": 10518877.2824,
-      "4x4_bounded": 16083475.8128,
-      "4x4_exponential": 13999688.1569,
-      "2x2_distinct_core": 77406450.4343
+      "1x1": 135099352.064,
+      "2x2": 18160928.1615,
+      "4x4_tight": 5550831.56661,
+      "4x4_yield": 26986871.2919,
+      "4x4_bounded": 16498525.3824,
+      "4x4_exponential": 17377610.0356,
+      "2x2_distinct_core": 127431715.715
     },
     "perf": "unavailable: perf_event_paranoid=4"
   },
