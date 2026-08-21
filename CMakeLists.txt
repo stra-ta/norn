@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.25)
 
 project(norn VERSION 0.1.0 LANGUAGES CXX)
 
+find_package(Threads REQUIRED)
+
 option(NORN_BUILD_TESTS "Build Norn tests" ON)
 option(NORN_BUILD_BENCHMARKS "Build Norn benchmarks" ON)
 option(NORN_WARNINGS_AS_ERRORS "Treat project warnings as errors" ON)
@@ -44,6 +46,18 @@ if(NORN_BUILD_TESTS)
   add_executable(norn_hazard_tests tests/hazard_test.cpp)
   target_link_libraries(norn_hazard_tests PRIVATE norn Catch2::Catch2WithMain)
   catch_discover_tests(norn_hazard_tests PROPERTIES TIMEOUT 300)
+
+  add_executable(norn_hardware_thread_control_tests tests/hardware_thread_control_test.cpp)
+  target_include_directories(norn_hardware_thread_control_tests PRIVATE ${PROJECT_SOURCE_DIR}/benchmarks)
+  target_link_libraries(norn_hardware_thread_control_tests PRIVATE norn Threads::Threads)
+  add_test(NAME hardware_thread_control COMMAND norn_hardware_thread_control_tests)
+
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_Interpreter_FOUND)
+    add_test(
+      NAME hardware_campaign_tool
+      COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/hardware_campaign_tool_test.py)
+  endif()
 endif()
 
 if(NORN_BUILD_BENCHMARKS)
@@ -59,4 +73,6 @@ if(NORN_BUILD_BENCHMARKS)
   target_link_libraries(norn_benchmarks PRIVATE norn benchmark::benchmark_main)
   add_executable(norn_mpmc_benchmarks benchmarks/mpmc_benchmark.cpp)
   target_link_libraries(norn_mpmc_benchmarks PRIVATE norn benchmark::benchmark_main)
+  add_executable(norn_hardware_benchmarks benchmarks/hardware_campaign_benchmark.cpp)
+  target_link_libraries(norn_hardware_benchmarks PRIVATE norn Threads::Threads)
 endif()

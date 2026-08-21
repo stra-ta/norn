@@ -24,7 +24,9 @@ struct alignas(cache_line_size) spsc_index<true> {
   std::atomic<std::size_t> value{0};
 };
 
-template <typename T, std::size_t Capacity, bool Padded = false>
+// `SequentiallyConsistent` is an isolated diagnostic configuration used by the
+// hardware campaign. The default preserves the acquire/release protocol.
+template <typename T, std::size_t Capacity, bool Padded = false, bool SequentiallyConsistent = false>
 class spsc_queue {
   static_assert(Capacity > 0, "queue capacity must be positive");
 
@@ -46,7 +48,7 @@ class spsc_queue {
   template <typename... Args>
   bool emplace(Args&&... args) {
     const std::size_t write = write_index_.value.load(std::memory_order_relaxed);
-    const std::size_t read = read_index_.value.load(std::memory_order_acquire);
+    const std::size_t read = read_index_.value.load(peer_load_order);
     if (write - read == Capacity) {
       return false;
     }
@@ -55,13 +57,13 @@ class spsc_queue {
     // construction throws, write_index_ is unchanged and the slot is reused.
     ::new (static_cast<void*>(storage_[write % Capacity].storage)) T(
         std::forward<Args>(args)...);
-    write_index_.value.store(write + 1, std::memory_order_release);
+    write_index_.value.store(write + 1, publication_store_order);
     return true;
   }
 
   bool try_pop(T& value) {
     const std::size_t read = read_index_.value.load(std::memory_order_relaxed);
-    const std::size_t write = write_index_.value.load(std::memory_order_acquire);
+    const std::size_t write = write_index_.value.load(peer_load_order);
     if (read == write) {
       return false;
     }
@@ -69,13 +71,13 @@ class spsc_queue {
     T* element = pointer_at(read);
     value = std::move(*element);
     element->~T();
-    read_index_.value.store(read + 1, std::memory_order_release);
+    read_index_.value.store(read + 1, publication_store_order);
     return true;
   }
 
   [[nodiscard]] std::optional<T> try_pop() {
     const std::size_t read = read_index_.value.load(std::memory_order_relaxed);
-    const std::size_t write = write_index_.value.load(std::memory_order_acquire);
+    const std::size_t write = write_index_.value.load(peer_load_order);
     if (read == write) {
       return std::nullopt;
     }
@@ -86,18 +88,23 @@ class spsc_queue {
     // can retry without advancing read_index_.
     std::optional<T> value(std::in_place, std::move(*element));
     element->~T();
-    read_index_.value.store(read + 1, std::memory_order_release);
+    read_index_.value.store(read + 1, publication_store_order);
     return value;
   }
 
   [[nodiscard]] bool empty() const noexcept {
     return read_index_.value.load(std::memory_order_relaxed) ==
-           write_index_.value.load(std::memory_order_acquire);
+            write_index_.value.load(peer_load_order);
   }
 
   [[nodiscard]] static constexpr std::size_t capacity() noexcept { return Capacity; }
 
  private:
+  static constexpr std::memory_order peer_load_order =
+      SequentiallyConsistent ? std::memory_order_seq_cst : std::memory_order_acquire;
+  static constexpr std::memory_order publication_store_order =
+      SequentiallyConsistent ? std::memory_order_seq_cst : std::memory_order_release;
+
   T* pointer_at(std::size_t index) noexcept {
     return std::launder(reinterpret_cast<T*>(storage_[index % Capacity].storage));
   }
@@ -117,5 +124,11 @@ class spsc_queue {
 
 template <typename T, std::size_t Capacity>
 using spsc_queue_padded = spsc_queue<T, Capacity, true>;
+
+// Stronger-order experimental alias. It remains semantically equivalent to the
+// acquire/release baseline because seq_cst loads and stores retain the required
+// release/acquire synchronization relations.
+template <typename T, std::size_t Capacity, bool Padded = false>
+using spsc_queue_seq_cst = spsc_queue<T, Capacity, Padded, true>;
 
 }  // namespace norn

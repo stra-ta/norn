@@ -23,6 +23,12 @@ jobs:
       - run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
       - run: cmake --build build
       - run: ctest --test-dir build --output-on-failure
+      - run: >-
+          python3 tools/run_hardware_campaign.py
+          --binary build/norn_hardware_benchmarks
+          --output results/hardware/ci-smoke.json
+          --case h3-spsc-unpadded-unpinned
+          --repetitions 3
 
   sanitizers:
     strategy:
@@ -43,3 +49,6 @@ jobs:
           -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=${{ matrix.sanitizer }}
       - run: cmake --build build
       - run: ctest --test-dir build --output-on-failure
+      - run: >-
+          build/norn_hardware_benchmarks
+          --queue spsc --items 1000 --repetitions 1 --warmups 0 --backoff tight

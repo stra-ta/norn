@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "campaign": "hardware-aware-concurrency",
+  "defaults": {
+    "items": 100000,
+    "repetitions": 9,
+    "warmup_runs": 2,
+    "backoff": "tight"
+  },
+  "cases": [
+    {
+      "id": "h3-spsc-unpadded-unpinned",
+      "milestone": "H3",
+      "question": "How stable is unpadded SPSC throughput without CPU placement control?",
+      "queue": "spsc",
+      "producers": 1,
+      "consumers": 1,
+      "placement": "unpinned"
+    },
+    {
+      "id": "h3-spsc-padded-unpinned",
+      "milestone": "H3",
+      "question": "How stable is padded SPSC throughput without CPU placement control?",
+      "queue": "spsc-padded",
+      "producers": 1,
+      "consumers": 1,
+      "placement": "unpinned"
+    },
+    {
+      "id": "h2-h3-spsc-same-cpu",
+      "milestone": "H2-H3",
+      "question": "What changes when both SPSC roles share one Linux logical CPU?",
+      "queue": "spsc-padded",
+      "producers": 1,
+      "consumers": 1,
+      "placement": "same-cpu",
+      "linux_only": true
+    },
+    {
+      "id": "h2-h3-spsc-distinct-core",
+      "milestone": "H2-H3",
+      "question": "What changes when SPSC roles occupy distinct physical cores?",
+      "queue": "spsc-padded",
+      "producers": 1,
+      "consumers": 1,
+      "placement": "distinct-core",
+      "linux_only": true
+    },
+    {
+      "id": "h2-h3-spsc-smt-siblings",
+      "milestone": "H2-H3",
+      "question": "What changes when SPSC roles share one physical core through SMT?",
+      "queue": "spsc-padded",
+      "producers": 1,
+      "consumers": 1,
+      "placement": "smt-siblings",
+      "linux_only": true
+    },
+    {
+      "id": "h2-h3-spsc-cross-package",
+      "milestone": "H2-H3",
+      "question": "What changes when SPSC roles span Linux CPU packages?",
+      "queue": "spsc-padded",
+      "producers": 1,
+      "consumers": 1,
+      "placement": "cross-package",
+      "linux_only": true
+    },
+    {
+      "id": "h5-mpmc-1x1-unpinned",
+      "milestone": "H5",
+      "question": "What retry and scheduler cost appears in 1x1 MPMC?",
+      "queue": "mpmc",
+      "producers": 1,
+      "consumers": 1,
+      "placement": "unpinned"
+    },
+    {
+      "id": "h5-mpmc-2x2-unpinned",
+      "milestone": "H5",
+      "question": "How does 2x2 MPMC contention change throughput and retries?",
+      "queue": "mpmc",
+      "producers": 2,
+      "consumers": 2,
+      "placement": "unpinned"
+    },
+    {
+      "id": "h5-mpmc-4x4-unpinned",
+      "milestone": "H5",
+      "question": "How does 4x4 MPMC contention change throughput and retries?",
+      "queue": "mpmc",
+      "producers": 4,
+      "consumers": 4,
+      "placement": "unpinned"
+    },
+    {
+      "id": "h5-mpmc-2x2-distinct-core",
+      "milestone": "H2-H5",
+      "question": "How does grouping MPMC producer and consumer workers on separate Linux cores affect contention?",
+      "queue": "mpmc",
+      "producers": 2,
+      "consumers": 2,
+      "placement": "distinct-core",
+      "linux_only": true
+    },
+    {
+      "id": "h6-mpmc-4x4-yield",
+      "milestone": "H6",
+      "question": "How does yielding trade throughput for CPU and scheduling behavior under MPMC contention?",
+      "queue": "mpmc",
+      "producers": 4,
+      "consumers": 4,
+      "placement": "unpinned",
+      "backoff": "yield"
+    },
+    {
+      "id": "h6-mpmc-4x4-bounded",
+      "milestone": "H6",
+      "question": "How does bounded spinning then yielding trade throughput for CPU and scheduling behavior?",
+      "queue": "mpmc",
+      "producers": 4,
+      "consumers": 4,
+      "placement": "unpinned",
+      "backoff": "bounded"
+    },
+    {
+      "id": "h6-mpmc-4x4-exponential",
+      "milestone": "H6",
+      "question": "How does small exponential backoff trade throughput for CPU and scheduling behavior?",
+      "queue": "mpmc",
+      "producers": 4,
+      "consumers": 4,
+      "placement": "unpinned",
+      "backoff": "exponential"
+    },
+    {
+      "id": "h7-spsc-seq-cst-unpinned",
+      "milestone": "H7",
+      "question": "What cost does a stronger but correct seq_cst SPSC publication protocol show?",
+      "queue": "spsc-seq-cst",
+      "producers": 1,
+      "consumers": 1,
+      "placement": "unpinned"
+    }
+  ]
+}

@@ -288,6 +288,48 @@ TEST_CASE("padded SPSC queue preserves the same basic contract") {
   REQUIRE_FALSE(queue.try_pop().has_value());
 }
 
+TEST_CASE("seq_cst SPSC experiment preserves the baseline contract") {
+  norn::spsc_queue_seq_cst<int, 2> queue;
+  REQUIRE(queue.try_push(1));
+  REQUIRE(queue.try_push(2));
+  REQUIRE_FALSE(queue.try_push(3));
+  REQUIRE(queue.try_pop() == 1);
+  REQUIRE(queue.try_pop() == 2);
+  REQUIRE_FALSE(queue.try_pop().has_value());
+}
+
+TEST_CASE("seq_cst SPSC experiment transfers a validated sequence between two threads") {
+  constexpr std::size_t count = 100'000;
+  norn::spsc_queue_seq_cst<std::size_t, 64> queue;
+  std::atomic<bool> failed = false;
+  std::thread producer([&] {
+    for (std::size_t value = 0; value < count;) {
+      if (queue.try_push(value)) {
+        ++value;
+      } else {
+        std::this_thread::yield();
+      }
+    }
+  });
+  std::thread consumer([&] {
+    for (std::size_t expected = 0; expected < count;) {
+      auto value = queue.try_pop();
+      if (!value.has_value()) {
+        std::this_thread::yield();
+      } else if (*value != expected) {
+        failed.store(true, std::memory_order_relaxed);
+        return;
+      } else {
+        ++expected;
+      }
+    }
+  });
+  producer.join();
+  consumer.join();
+  REQUIRE_FALSE(failed.load(std::memory_order_relaxed));
+  REQUIRE(queue.empty());
+}
+
 TEST_CASE("SPSC queue preserves FIFO order through repeated wraparound") {
   norn::spsc_queue<int, 3> queue;
   for (int value = 0; value < 10'000; ++value) {
