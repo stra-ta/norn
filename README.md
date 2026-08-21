@@ -70,7 +70,7 @@ Apple Clang TSan and the other GCC sanitizer configurations are covered by the v
 The bounded queues avoid individual node allocation and reclamation.
 The hazard-pointer queue pays that cost deliberately so the lifetime problem is visible in code and tests.
 
-## Benchmarks
+## Baseline queue benchmarks
 
 Measured on an Apple M1 with Apple Clang 21.0.0 at commit `5d73d0eb`, Release build, batch size 100,000 items.
 Throughput is items per second from the harness; per-item cost is derived from the same value so the two columns agree.
@@ -121,9 +121,21 @@ MPMC 1x1 is the fastest single-pair config; throughput drops as producer and con
 Full results and metadata in [docs/BENCHMARK_RESULTS.md](docs/BENCHMARK_RESULTS.md).
 
 The legacy table measures the original harness and is not a universal hardware claim.
-The focused hardware campaign adds persistent-worker measurements, Linux affinity read-back, retry and scheduler accounting, and safe seq_cst comparison cases.
-Its first native M1 pilot favors padded SPSC under scheduler-managed placement, while the virtualized Linux ARM64 pilot does not reproduce that direction.
-Read [docs/HARDWARE_PERFORMANCE.md](docs/HARDWARE_PERFORMANCE.md) for methodology, raw-result locations, results, and caveats.
+
+### Hardware campaign
+
+The focused hardware campaign reruns the queues under a steady-state harness that excludes thread setup from the timed region, and adds Linux affinity read-back, retry and scheduler accounting, and safe `seq_cst` comparison cases.
+The measurements come from the same machines, but the numbers are not directly comparable with the baseline table above.
+
+Three findings worth reading first:
+
+- **Steady-state MPMC 1x1 reaches about 134M ops/s** on both native M1 (133.99M) and the Linux ARM64 VM (135.10M), far above the baseline's 30.56M, because the steady-state harness does not time queue construction or thread creation.
+- **The MPMC contention cliff is shared across environments**: 1x1 at ~134M drops to ~21.7M at 2x2 and ~6.5M at 4x4 tight.
+Yielding or bounded/exponential backoff recovers part of the loss (4x4 yield reaches ~9.6M on M1).
+- **Cache-line padding is not portable**: the M1 pilot favors padded SPSC (60.41M vs 31.32M unpadded), but the virtualized Linux ARM64 pilot reverses it (12.67M vs 22.28M unpadded).
+Pinning both producer and consumer to one vCPU collapses padded SPSC to 0.17M, while distinct-core pinning recovers to 18.54M.
+
+Read [docs/HARDWARE_PERFORMANCE.md](docs/HARDWARE_PERFORMANCE.md) for methodology, raw-result locations, the full pilot table, and caveats.
 
 ## Lifecycles
 
