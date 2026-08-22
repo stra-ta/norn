@@ -3,11 +3,14 @@
 [![CI](https://github.com/wheevu/norn/actions/workflows/ci.yml/badge.svg)](https://github.com/wheevu/norn/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Norn is a C++20 concurrency lab for building, measuring, and explaining queues under the C++ memory model.
+Norn is a low-level C++20 concurrency and memory-management library for latency-sensitive systems.
 
-It starts with simple mutex-backed queues, moves through bounded SPSC and MPMC rings, and ends with an unbounded node-based queue that needs hazard-pointer reclamation.
+It ships small, well-specified building blocks: cache-line utilities, backoff policies, bounded SPSC and MPMC ring buffers, and a hazard-pointer-based MPSC linked queue.
 
-Every step has tests, design notes, and an explanation of the tradeoffs.
+The repository is also the library's lab: co-located tests, benchmarks, and hardware experiments that build, measure, and explain these designs under the C++ memory model.
+
+Norn is pre-1.0 software under active development.
+APIs may still change across the 0.x series, and nothing here should be read as a production-maturity or long-term-stability claim.
 
 ![Norn architecture](docs/ARCHITECTURE.svg)
 
@@ -58,20 +61,60 @@ ctest --preset tsan --output-on-failure
 GCC's ThreadSanitizer does not support `std::atomic_thread_fence` in this setup.
 Apple Clang TSan and the other GCC sanitizer configurations are covered by the verification work.
 
+## Install and consume
+
+Install a configured build to a prefix:
+
+```sh
+cmake --preset release
+cmake --build --preset release
+cmake --install build/release --prefix <prefix>
+```
+
+Consume it from any project with CMake config mode:
+
+```cmake
+find_package(norn CONFIG REQUIRED)
+
+target_link_libraries(my_app PRIVATE norn::norn)
+```
+
+Configure the consuming project with `-DCMAKE_PREFIX_PATH=<prefix>` when the prefix is outside CMake's standard search paths.
+
+`norn::norn` declares a dependency on the full library.
+`norn::core` declares a core-only dependency tier, although both targets use the package's shared installed header tree.
+
+## Core primitives
+
+The `norn/core/` headers provide the small pieces the queues are built from:
+
+- `norn::cache_line_size`: the destructive interference size, taken from `std::hardware_destructive_interference_size` when the toolchain provides it and 64 otherwise.
+- `norn::cache_aligned<T>`: a wrapper that aligns its `value` member to one cache line.
+- `norn::isolated_atomic<T>`: `cache_aligned<std::atomic<T>>`, an atomic isolated onto its own cache line.
+- `norn::cpu_relax()`: an architecture-specific pause hint (`pause` on x86, `yield` on ARM64, a signal fence elsewhere).
+- `norn::backoff::{tight, yield, bounded, exponential}`: wait strategies for retry loops.
+
+Every backoff policy is default-constructible and exposes the same two-operation contract: `reset()` restores the initial state before a new contention episode, and `operator()` performs exactly one wait step.
+Stateful policies (`bounded`, `exponential`) should be reset between episodes; stateless policies accept `reset()` as a no-op.
+Policies do no logging, no allocation, and no timing.
+
 ## What Norn contains
 
 | Structure | Thread model | Storage | What it shows |
 | --- | --- | --- | --- |
-| `mutex_queue<T>` | Multiple producers and consumers | `std::deque` | A simple reference implementation with close and drain semantics |
+| `mutex_queue<T>` | Multiple producers and consumers | `std::deque` | A simple blocking reference implementation with close and drain semantics |
 | `bounded_mutex_queue<T, N>` | Multiple producers and consumers | Fixed ring | A bounded locking baseline |
-| `spsc_queue<T, N>` | One producer, one consumer | Pre-allocated ring | Ownership-based atomic publication |
-| `spsc_queue_padded<T, N>` | One producer, one consumer | Pre-allocated ring | The cost and effect of cache-line separation |
-| `mpmc_queue<T, N>` | Multiple producers and consumers | Pre-allocated ring | Sequence numbers, CAS reservation, and weak progress semantics |
-| `mpsc_queue<T>` | Multiple producers, one consumer | Heap nodes | Hazard-pointer protection and deferred reclamation |
+| `spsc_ring<T, N>` | One producer, one consumer | Pre-allocated ring | Ownership-based atomic publication |
+| `spsc_ring_padded<T, N>` | One producer, one consumer | Pre-allocated ring | The cost and effect of cache-line separation |
+| `mpmc_ring<T, N>` | Multiple producers and consumers | Pre-allocated ring | Sequence numbers, CAS reservation, and weak progress semantics |
+| `mpsc_linked_queue<T>` | Multiple producers, one consumer | Heap nodes | Hazard-pointer protection and deferred reclamation |
+
+The 0.1 names `spsc_queue`, `spsc_queue_padded`, `spsc_queue_seq_cst`, and `mpmc_queue` remain available as aliases of the canonical types above and are supported through the 0.x series.
+For the hazard-pointer queue, `mpsc_queue` remains the retained implementation name in `norn/hazard_pointer.hpp`, and the canonical name `mpsc_linked_queue` aliases it until its decomposition in 0.3.
 
 **Benchmark output (hardware campaign)**: per-sample `workers` array with per-thread `pushes`, `pops`, `retries`, `yields`, `spin_steps`, `producer_fairness`, `consumer_fairness`; campaign medians for all counter fields.
 
-The bounded queues avoid individual node allocation and reclamation.
+The bounded rings avoid individual node allocation and reclamation.
 The hazard-pointer queue pays that cost deliberately so the lifetime problem is visible in code and tests.
 
 ![Norn memory model](docs/MEMORY-MODEL.svg)
@@ -155,12 +198,12 @@ The hazard-pointer queue adds a separate lifetime protocol: protect a node befor
 
 ## Example
 
-The SPSC queue has the smallest API:
+The SPSC ring has the smallest API:
 
 ```cpp
-#include <norn/spsc_queue.hpp>
+#include <norn/queue/spsc_ring.hpp>
 
-norn::spsc_queue<int, 1024> queue;
+norn::spsc_ring<int, 1024> queue;
 
 queue.try_push(42);
 
@@ -170,42 +213,53 @@ if (auto value = queue.try_pop()) {
 ```
 
 The SPSC contract is strict: exactly one thread owns producer operations and exactly one thread owns consumer operations.
-Use `mpmc_queue` or a mutex-backed queue when that ownership model does not fit.
+Use `mpmc_ring` or a mutex-backed queue when that ownership model does not fit.
 
 ## Important distinctions
 
-### SPSC ring buffer
+### spsc_ring
 
 The producer owns the write index and the consumer owns the read index.
 Each side publishes progress with release stores and observes the other side with acquire loads.
 Values live in pre-allocated slots, and the queue manages object lifetimes explicitly.
 
-### MPMC ring buffer
+Under this single-producer, single-consumer ownership contract, `try_push` and `try_pop` are bounded sequences of loads and stores with no loops and no waiting on the peer, so the queue is wait-free for as long as each side honors its role.
 
-The bounded MPMC queue uses per-slot sequence numbers and CAS-based reservation.
+### mpmc_ring
+
+The bounded MPMC ring uses per-slot sequence numbers and CAS-based reservation.
 A sequence number tells a producer when a slot can be reused and tells a consumer when a value is published.
 
-The queue is mutex-free and non-blocking, but it is **not formally lock-free**.
+The ring is mutex-free, non-blocking, bounded, and pre-allocated with no per-operation allocation, but it is **not formally lock-free**.
 A producer paused after reserving a slot can create a false-empty hole.
 A consumer paused after claiming a slot can create a false-full result.
 These behaviors are intentional, documented, and tested.
 
-### Hazard pointers
+### mpsc_linked_queue
+
+The linked MPSC queue allocates a heap node per push and requires an explicit caller-owned `norn::hazard_domain` at construction; every operating thread registers with that domain.
 
 Hazard pointers protect dynamically allocated nodes while a thread is reading them.
 The reader publishes a pointer, validates that the shared pointer has not changed, and clears the protection when finished.
 A retired node is reclaimed only after a scan finds no active hazard pointer for it.
 
-The hazard-pointer demonstration is MPSC rather than MPMC.
-That keeps the reclamation example focused while the bounded MPMC ring covers the many-to-many case.
+Progress therefore depends on node allocation succeeding and on scan work retiring nodes, so no formal lock-free or wait-free claim is made.
+The implementation currently lives in `norn/hazard_pointer.hpp`, and the demonstration is MPSC rather than MPMC: that keeps the reclamation example focused while `mpmc_ring` covers the many-to-many case.
+
+### Mutex queues
+
+`mutex_queue` and `bounded_mutex_queue` are blocking reference implementations with close-and-drain semantics: `close()` rejects future pushes, wakes blocked operations, and lets consumers drain accepted values.
+They anchor correctness comparisons and benchmark baselines rather than competing on throughput.
 
 ## Verification
 
-The current suite contains 37 tests covering:
+The suite covers:
 
 - Mutex queue behavior, close-and-drain semantics, and bounded capacity.
 - SPSC boundaries, wraparound, move-only values, and two-thread transfer.
 - MPMC boundaries, wraparound, exactly-once consumption, and progress holes.
+- Core primitives: cache-line sizing, cache-aligned and isolated atomics, `cpu_relax`, and backoff policies.
+- Queue API compatibility between the 0.1 names and the canonical 0.2 types.
 - Parameterized MPMC and SPSC stress histories.
 - Hazard-pointer publication, registration, reclamation, move-only values, and queue stress.
 
@@ -229,7 +283,7 @@ Local Linux verification uses a disposable ARM64 Lima copy of the source tree.
 
 ## Documentation
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): milestone scope and project boundaries.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the 0.2 architecture record, covering library and lab responsibilities and project boundaries.
 - [`docs/ARCHITECTURE_WRITEUP.md`](docs/ARCHITECTURE_WRITEUP.md): the complete architecture and performance overview.
 - [`docs/MPMC_DESIGN.md`](docs/MPMC_DESIGN.md): slot states, reservations, memory orders, and progress limits.
 - [`docs/HAZARD_POINTER_DESIGN.md`](docs/HAZARD_POINTER_DESIGN.md): publication, scanning, ABA, and reclamation.
@@ -242,12 +296,21 @@ Local Linux verification uses a disposable ARM64 Lima copy of the source tree.
 
 ## Limitations
 
-- `mpmc_queue` is not formally lock-free despite using atomics and no mutex.
-- The hazard-pointer demonstration is MPSC, not MPMC.
-- Benchmark setup is part of the timed workload.
+- `mpmc_ring` is not formally lock-free despite using atomics and no mutex.
+- `mpsc_linked_queue` makes no formal lock-free or wait-free claim, and its progress depends on allocation and scan work.
+- Benchmark setup is part of the timed workload in the baseline harness.
 - Native x86-64 verification comes from GitHub Actions; local Linux verification is ARM64.
 - The Linux ARM64 hardware pilot is virtualized, and GitHub Actions is a functional smoke gate rather than a performance environment.
-- This is an educational concurrency project, not a drop-in production queue library.
+- Norn is a pre-1.0 library and lab, not a drop-in production dependency.
+
+## Out of scope
+
+Norn deliberately excludes:
+
+- Schedulers and coroutine runtimes.
+- Executors and thread pools.
+- Networking, sockets, and I/O contexts.
+- Any general-purpose threading framework.
 
 ## License
 

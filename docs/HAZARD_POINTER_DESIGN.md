@@ -78,7 +78,10 @@ This chain of ordering guarantees that a validated pointer is safe to dereferenc
 
 ## Scan algorithm
 
-The scanner performs these steps:
+The scan (`hazard_domain::scan_locked`) runs while the domain mutex is held for
+its entire duration.
+It does not take a snapshot of records and it does not release the lock mid-scan.
+The scanner performs these phases:
 
 Phase 0: Issue `std::atomic_thread_fence(std::memory_order_seq_cst)`.
   This fence pairs with the reader's seq_cst fence: together they ensure that if
@@ -88,15 +91,17 @@ Phase 0: Issue `std::atomic_thread_fence(std::memory_order_seq_cst)`.
   even after the reader's release-store is globally visible, because the C++
   memory model does not establish a synchronizes-with relationship between a
   release-store and a subsequent acquire-load that reads the old value.
-Phase 1: Under the domain's registration lock, take a snapshot of all registered
-  records into a local array. Release the lock immediately after.
-  Records that deregister after this point are not in the snapshot, but they
-  remain valid for the scan's duration because the domain holds ownership of
-  deregistered records until the next scan completes.
-Phase 2: For each record in the snapshot and each hazard slot, collect
-  h[r][s] = slot.load(acquire).
-Phase 3: For each retired pointer p, if p does not appear in any collected h[r][s]
-  value, reclaim p.
+Phase 1: Collect all published hazard values into a `std::unordered_set<void*>`.
+  Iterate the domain's active record list and insert each non-null slot value,
+  reading slots with acquire loads.
+  Deregistration cannot interleave because `deregister_thread()` takes the same
+  mutex, so the active list is stable for the whole scan and every scanned
+  record stays alive.
+Phase 2: Compact the domain's shared retired list in place.
+  Walk the list once: an entry whose pointer is present in the collected set is
+  kept, and an unprotected entry is reclaimed by invoking its stored deleter and
+  dropped.
+  The list is then resized to the number of surviving entries.
 
 The reader's seq_cst fence (step 3 of protect) and the scanner's seq_cst fence
 (phase 0 of scan) together establish the ordering that guarantees a validated
@@ -105,59 +110,77 @@ publication.
 If the scanner runs before the publication, the reader's re-validation (step 4 of
 protect) detects the source change and retries with the new pointer.
 
-Scan cost: collecting hazard slots is O(N * H).
-Checking each retired pointer against the collected set is O(R * N * H) with a
-linear scan, where R is the number of retired entries.
-At the threshold R = Theta(N * H), this is O((N * H)^2).
-For the expected N and H in Norn this is small and acceptable.
-A hash set over the collected hazard values would reduce the membership check to
-O(N * H + R) expected; this is a possible optimization if profiling shows the
-linear scan is a bottleneck.
+Scan cost: building the hazard set is expected O(N * H), including the
+unordered_set's allocation and hashing work, where N is the number of active
+records and H is the fixed two slots per record.
+The compaction walk performs expected O(R) hash lookups and O(R) bookkeeping
+over the R retired entries.
+A full scan therefore costs expected O(N * H + R), with the unordered_set
+allocation counted as part of the scan cost.
+Scanning is not lock-free: it holds the domain mutex from start to finish.
 
 ## Architecture
 
 ### `norn::hazard_domain`
 
 Shared state for all threads using hazard pointers.
-Owns the list of registered hazard records and provides retire and scan.
+Owns the active records, the zombie (deregistered) records, and the shared
+retired list, and provides retire and scan.
+All mutation of that state goes through a single `std::mutex` (`mu_`).
 
-- `register_thread() -> hazard_record&` appends the calling thread's record
-  (stored in `thread_local` storage) to the domain's list under a lightweight lock.
-- `deregister_thread()` removes the record and transfers any unreclaimed retired
-  nodes to the domain's internal retired list for the next scan.
+- `register_thread() -> hazard_record&` returns the calling thread's existing
+  `thread_local` record when it is already registered with this domain;
+  otherwise it allocates a fresh record and appends it to the active list under
+  the mutex.
+- `deregister_thread()` removes the record from the active list, transfers any
+  record-local retired entries to the domain's shared retired list, clears the
+  record's domain pointer, and moves the record to the zombie list, all under
+  the mutex.
 - `retire(void* ptr, void(*deleter)(void*) noexcept)` appends the pair to the
-  calling thread's local retired list.
-- `scan()` collects hazard slots (Phase 1) and reclaims safe retired nodes
-  (Phase 2). Called by each thread periodically after its retired list crosses a
-  dynamic threshold.
-- `thread_count()` returns the number of registered threads (used to size the
-  threshold).
+  domain's shared retired list under the mutex and automatically runs
+  `scan_locked()` once that list reaches
+  `max(64, 2 * active_thread_count * slots_per_record)` entries.
+- `scan()` takes the mutex and forces one full scan pass regardless of the
+  threshold.
+- `thread_count()` returns the number of active registered records, read under
+  the mutex.
 
 The domain is not copyable or movable.
-Registration and deregistration use a spinlock that is only contended at thread
-start and exit, not in the hot path.
+Registration, deregistration, retirement, scanning, and thread counting all use
+the same `std::mutex`; contention is limited to thread start and exit,
+retirement, and scan passes, not the readers' protect and clear path.
 
 ### `norn::hazard_record`
 
 Per-thread state registered with a domain.
-Contains an array of `std::atomic<void*>` hazard slots (template parameter,
-default 2 for the Michael-Scott queue).
+Contains exactly two `std::atomic<void*>` hazard slots
+(`hazard_record::kSlots == 2`), matching the Michael-Scott-derived pop path's
+dual protection.
 Heap-allocated by the domain at registration and owned by the domain until domain
 destruction.
 The record is not copyable or movable.
 Only the owning thread may publish or clear hazard slots.
 
-`protect<int Index>(std::atomic<void*>& source) -> T*` performs the five-step
+`protect<Index, T>(std::atomic<void*>& source) -> T*` performs the five-step
 publication protocol described above.
 `clear<int Index>()` stores null into the slot (relaxed order).
 
+The record also exposes a public `retired_` vector with a matching
+`retire_entry` helper.
+Nothing in the current queue appends to it during normal operation, since
+`mpsc_queue` retires exclusively through `domain.retire`; the vector remains the
+transfer surface that `deregister_thread()` drains into the domain's retired
+list.
+
 Records are created via `thread_local` storage: each thread has a lazily-allocated
 record that is registered with the domain on first use.
-The domain maintains two lists under its registration spinlock: an active list
+The domain maintains two lists under its mutex: an active list
 (scanned) and a zombie list (deregistered records awaiting domain destruction).
-Deregistration moves a record from the active list to the zombie list; the record's
-retired nodes are transferred to the domain for reclamation during the next scan.
-Records in the zombie list are not scanned; their hazard slots are irrelevant because
+Deregistration removes a record from the active list, transfers its retired nodes
+to the domain for reclamation during the next scan, clears the record's domain
+pointer, and moves it to the zombie list.
+Records in the zombie list are retained until domain destruction and are never
+scanned; their hazard slots are irrelevant because
 the owning thread has exited and will not dereference any protected pointer.
 
 ### `norn::hazard_ptr<T>`
@@ -171,16 +194,16 @@ atomically, adding complexity without benefit.
 
 ### Retirement
 
-`domain.retire(ptr, deleter)` appends to the thread-local retired list.
-It does not perform a scan.
+`domain.retire(ptr, deleter)` appends the pair to the domain's shared retired
+list under the domain mutex.
+It may perform a scan: when the shared list reaches
+`max(64, 2 * active_thread_count * slots_per_record)` entries, `retire` calls
+`scan_locked()` before returning.
+An explicit `domain.scan()` forces a pass regardless of the threshold.
 After retire, the pointer must not be accessed unless a live hazard_ptr guard
 protects it.
 If a thread needs to read a node's contents after retiring it, it must hold a
 hazard_ptr guard before calling retire.
-
-After each retire, if the local retired list exceeds `max(64, 2 * thread_count()
-* slots_per_thread)`, the thread calls `domain.scan()`.
-The threshold is dynamic because the thread count can change between calls.
 
 Deleters are `void(*)(void*) noexcept`.
 If a custom deleter cannot be noexcept, the caller wraps it in a noexcept lambda
@@ -189,15 +212,24 @@ that static_asserts or documents the constraint.
 Thread deregistration: when a thread exits, `deregister_thread()` is called.
 Its retired nodes are transferred to the domain for reclamation during the next
 scan by another thread.
-Records remain stable during scans because the domain's registration lock is held
-only during register/deregister (not during scan), and records are not moved once
-created.
+Records remain stable during scans because the domain owns every active and
+zombie record until domain destruction, and `scan_locked()` runs under the same
+mutex as registration and deregistration changes.
+Records are not moved once created.
 
-## Demonstration vehicle: Michael-Scott MPMC queue
+## Demonstration vehicle: the MPSC linked queue
 
-M6 implements the Michael-Scott lock-free queue.
-This is the classic structure that motivates hazard pointers and the most
-interview-relevant example.
+M6 implements an unbounded multiple-producer, single-consumer linked queue whose
+linking and helping steps are derived from the Michael-Scott design.
+A node-based structure is exactly what motivates hazard pointers: a pop unlinks
+and retires a node while a producer may still be helping through the tail.
+
+Norn makes no formal lock-free claim for this queue.
+Producers allocate a heap node per push, retirement and scanning run under the
+domain's mutex with allocation on the scan path, and progress therefore depends
+on node allocation succeeding and on scan work retiring nodes.
+The specialization to a single consumer keeps the reclamation example focused;
+the bounded `mpmc_ring` covers the many-to-many case.
 
 ### Node layout
 
@@ -234,66 +266,85 @@ first real node exists.
 
 ### Pop (dequeue)
 
-1. Protect `head_` via hazard slot 0.
-2. Read `next = head_->next`.
-3. Protect `next` via hazard slot 1.
-4. Re-validate `head_` has not changed (re-read `head_`).
-5. If `head_` changed, clear both slots and retry from step 1.
-6. If `head_ == tail_` (both point to the sentinel, `next == null`), the queue
-   is empty; clear both slots and return empty.
-7. If `head_ == tail_` but `next != null`, tail is lagging. Help advance tail
-   by CASing `tail_` from old_tail to `next`. Clear both slots and retry.
-8. Read the value from `next` into a local variable (using move or copy, which
-   may throw; if it throws, the node is not leaked because it remains linked
-   and protected).
-9. Try to CAS `head_` from old_head to `next`.
-10. If CAS fails, clear both slots and retry from step 1.
-11. If CAS succeeds, retire old_head.
-12. Return the value read in step 8.
+Pop runs entirely on the single consumer thread; producers never modify `head_`.
 
-The payload is read (step 8) only after validating that this thread will win the
-CAS (steps 4-7 confirmed the state is stable and this thread can proceed).
-However, the actual CAS (step 9) may still fail if another thread sneaks in.
-On CAS failure, the value read in step 8 is discarded (the local variable goes
-out of scope); the node is not retired because the CAS failed.
-This is safe: the value was read from a live, protected node, and discarding a
-copy does not corrupt the queue state.
-For move-only T, step 8 moves the value out of the node; on CAS failure the
-moved-from node is left in a moved-from state, which is fine because the node
-remains linked and the next retry will read the same (still-valid) node again.
-Actually — this is incorrect: if step 8 moved the value out and the CAS fails,
-the node is now in a moved-from state, and a future pop by another thread would
-read garbage. Therefore: for move-only T, the payload must NOT be moved until
-after the CAS succeeds. The design uses step 8 as a copy-or-move attempt
-behind a check: if T is copyable, copy it in step 8; if T is move-only, defer
-the move to step 12 (after the successful CAS).
-The implementation uses `if constexpr` to choose the correct path.
+1. Register the calling thread with the domain to obtain its hazard record
+   (an already-registered thread reuses its record).
+2. Loop:
+   a. Protect `head_` via hazard slot 0 by constructing a
+      `hazard_ptr<node, 0>` guard; the guard's construction runs the five-step
+      publication protocol and yields the validated head pointer `h`.
+   b. Protect the value of `h->next` via hazard slot 1 by constructing a
+      `hazard_ptr<node, 1>` guard; this yields the validated successor
+      pointer `next`.
+   c. Reload `head_` (acquire) and check it still equals `h`.
+      If it does not, validation failed: destroy both guards and retry.
+   d. If `next` is null, the queue is empty: return `std::nullopt`.
+   e. Load `tail_` (acquire). If `h == tail`, tail is lagging behind the
+      already-linked chain: CAS `tail_` from `t` to `next`, then retry.
+      This helping step happens before any retirement because retiring the
+      node that `tail_` points to would let a scan free a node a producer is
+      about to dereference while helping through the tail.
+   f. CAS `head_` from `h` to `next`.
+      Given single-consumer validation in step c this CAS is defensive and
+      expected to succeed; on failure, destroy both guards and retry.
+3. Only after the CAS in step f succeeds:
+   a. Move-construct the return value from the payload storage of `next`
+      via `std::launder`; `T` is nothrow-move-constructible, so this cannot
+      throw and the node is privately owned by the consumer at this point.
+   b. Retire `h`, passing `delete_node` when the node carries a payload and
+      `delete_sentinel` for the sentinel.
+   c. Return the value.
+
+Both guards are RAII objects: every exit path, including retries and the
+empty return, destroys them and clears both hazard slots (relaxed order).
 
 ### Empty check
 
-`head_ == tail_` is empty only when `head_->next` is null (the queue has no
-real nodes beyond the sentinel).
-If `head_ == tail_` but `head_->next` is non-null, tail is lagging and the next
-iteration of pop will help advance it.
+`empty()` loads `head_` (acquire) and returns whether `head_->next` is null.
+It does not compare against `tail_` and does not publish a hazard pointer:
+only the single consumer unlinks or frees nodes, so no other thread can free
+the node `head_` points to, and producers only append successors atomically.
+Inside `try_pop`, emptiness is decided after full validation: a protected,
+validated successor of null (step d above) means no real node is linked.
 
 ## Constraints
 
-- T must be nothrow-move-constructible (the pop path moves the payload out of the
-  node after a successful CAS; throwing would leave the queue in an inconsistent
-  state).
-- T must be nothrow-move-assignable for the out-parameter pop path.
-- The domain must outlive all threads registered with it.
-- Threads must call `scan()` periodically; failure to do so leaks retired nodes.
-- Custom deleters must be `void(*)(void*) noexcept`.
-- A thread must not access a node after retiring it unless it holds an active
-  hazard_ptr guard for that node.
-- The retired list is pre-reserved at registration to avoid allocation during
-  retire; if the pre-allocated capacity is exceeded, the thread calls scan()
-  to reclaim space.
+- Enforced by `static_assert` in `mpsc_queue`: `T` must be nothrow
+  move-constructible and nothrow-destructible.
+  Pop move-constructs its return value only after the head CAS succeeded and
+  the node is privately owned by the consumer, so the move cannot throw out
+  of `try_pop` and no partially moved node is ever observable.
+- Exactly one thread may consume: `try_pop` and `empty()` assume no other
+  consumer advances `head_` or frees nodes.
+  Any number of producers may call `try_push`.
+- A `hazard_domain` passed to an `mpsc_queue` must outlive the queue and
+  every operation on it; the queue stores a plain reference and registers
+  threads with the domain lazily on the first `try_push` or `try_pop`.
+- Destruction must be quiescent: no pushes or pops may be in flight while the
+  queue or its domain is destroyed.
+  The domain destructor reclaims all retired-but-unreclaimed entries and
+  destroys every active and deregistered (zombie) record, reclaiming any
+  record-local retired entries they still hold.
+- Each `retire` appends the pair to the domain's shared retired list under
+  its mutex and automatically runs a scan once that list reaches
+  `max(64, 2 * active_thread_count * slots_per_record)` entries.
+  An explicit `scan()` forces a pass regardless of the threshold.
+  Nothing remains leaked: whatever no scan reclaimed is reclaimed when the
+  domain is destroyed.
+- Custom deleters must match `void(*)(void*) noexcept`, which is the
+  parameter type of `retire` and the stored deleter type of a retired entry.
+  The queue supplies `delete_node` and `delete_sentinel`, which destroy the
+  payload (payload nodes only) and free the node.
+- After retiring a pointer, a thread must not access it again unless a live
+  `hazard_ptr` guard protects it: the entry sits in the shared retired list,
+  and the retire call itself may trigger a scan that frees every entry not
+  published in a hazard slot.
 
 ## Scope limitations
 
-- M6 is a Michael-Scott MPMC queue with hazard-pointer reclamation.
+- M6 is an MPSC linked queue with hazard-pointer reclamation; it makes no
+  formal lock-free claim, since progress depends on allocation and scan work.
 - Epoch-based reclamation and RCU are documented as alternative schemes for future
   work.
 - The implementation targets correctness and educational value, not raw performance;
@@ -316,7 +367,8 @@ iteration of pop will help advance it.
 ## Verification plan
 
 - Unit tests for hazard_domain, hazard_record, and hazard_ptr.
-- MS queue stress test (multiple threads, many items).
+- Linked MPSC queue stress test (multiple producer threads, one consumer, many
+  items).
 - ASan catches use-after-free or double-free.
 - TSan exercises the ordering paths (TSan detects data races on atomic accesses;
   it does not prove weak-memory correctness by itself).
@@ -327,12 +379,16 @@ iteration of pop will help advance it.
 
 ## Decisions to confirm
 
-- Michael-Scott MPMC as the demonstration vehicle.
+- The MPSC linked queue (Michael-Scott-derived linking) as the demonstration
+  vehicle, with no formal lock-free claim.
 - 2 hazard slots per thread (sufficient for MS pop's dual protection).
 - Single-collect scan (correctness from the reader's fence, not scanner double-
   collection).
 - Sentinel node with aligned byte storage (no T value).
-- Dynamic scan threshold based on runtime thread count.
+- Retirement-triggered scanning: `retire` runs `scan_locked()` automatically
+  once the shared retired list reaches
+  `max(64, 2 * active_count * slots_per_record)`, with an explicit `scan()`
+  escape hatch.
 - `void(*)(void*) noexcept` deleters.
 - Non-movable hazard_ptr.
 - All three HP types in `include/norn/hazard_pointer.hpp`.

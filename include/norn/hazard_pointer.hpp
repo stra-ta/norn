@@ -232,8 +232,15 @@ class hazard_domain {
 };
 
 // ---------------------------------------------------------------------------
-// mpsc_queue<T> — lock-free multi-producer single-consumer linked queue
-// using hazard pointers for safe memory reclamation.
+// mpsc_queue<T> — multiple-producer, single-consumer linked queue over heap
+// nodes, using hazard pointers for safe memory reclamation.
+//
+// Producers allocate a node per push, and reclamation runs scans under the
+// domain's mutex, so progress depends on allocation success and scan work:
+// this implementation makes no formal lock-free or wait-free claim.
+//
+// This is the retained implementation name; norn/queue/mpsc_linked_queue.hpp
+// aliases it as the canonical 0.2 name until the header is decomposed in 0.3.
 // ---------------------------------------------------------------------------
 
 template <typename T>
