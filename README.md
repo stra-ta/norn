@@ -11,6 +11,8 @@ Every step has tests, design notes, and an explanation of the tradeoffs.
 
 ![Norn architecture](docs/ARCHITECTURE.svg)
 
+![Norn difficulty ladder](docs/PROGRESSION.svg)
+
 ## Build and test
 
 Requirements:
@@ -67,13 +69,20 @@ Apple Clang TSan and the other GCC sanitizer configurations are covered by the v
 | `mpmc_queue<T, N>` | Multiple producers and consumers | Pre-allocated ring | Sequence numbers, CAS reservation, and weak progress semantics |
 | `mpsc_queue<T>` | Multiple producers, one consumer | Heap nodes | Hazard-pointer protection and deferred reclamation |
 
+**Benchmark output (hardware campaign)**: per-sample `workers` array with per-thread `pushes`, `pops`, `retries`, `yields`, `spin_steps`, `producer_fairness`, `consumer_fairness`; campaign medians for all counter fields.
+
 The bounded queues avoid individual node allocation and reclamation.
 The hazard-pointer queue pays that cost deliberately so the lifetime problem is visible in code and tests.
+
+![Norn memory model](docs/MEMORY-MODEL.svg)
 
 ## Baseline queue benchmarks
 
 Measured on an Apple M1 with Apple Clang 21.0.0 at commit `5d73d0eb`, Release build, batch size 100,000 items.
 Throughput is items per second from the harness; per-item cost is derived from the same value so the two columns agree.
+
+![Norn throughput evidence](docs/BENCHMARKS.svg)
+
 
 | Structure | Configuration | ns/item | ops/s |
 | --- | --- | --- | --- |
@@ -200,6 +209,13 @@ The current suite contains 37 tests covering:
 - Parameterized MPMC and SPSC stress histories.
 - Hazard-pointer publication, registration, reclamation, move-only values, and queue stress.
 
+**Hardware campaign evidence** (CTest `hardware_campaign_tool` and `hardware_binary_json_contract`):
+- Per-worker retry, yield, spin-step, and fairness counts in every sample.
+- Full MPMC unpinned matrix: 1x1/2x2/4x4 × tight/yield/bounded/exponential backoff (1M items each).
+- Campaign summary medians for retries, yields, spin steps, producer/consumer fairness.
+- Multi-worker pinned cases guarded against misleading distinct-core placement.
+- Binary JSON contract test validating output shape, sample completeness, and worker-aggregate reconciliation.
+
 The project has been verified with:
 
 | Environment | Toolchain | Coverage |
@@ -221,7 +237,7 @@ Local Linux verification uses a disposable ARM64 Lima copy of the source tree.
 - [`docs/MEMORY_MODEL.md`](docs/MEMORY_MODEL.md): synchronization and linearization notes.
 - [`docs/BENCHMARKING.md`](docs/BENCHMARKING.md): benchmark methodology and caveats.
 - [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md): measured metrics and environment.
-- [`docs/HARDWARE_PERFORMANCE.md`](docs/HARDWARE_PERFORMANCE.md): affinity, false sharing, contention, backoff, ordering, and counter evidence.
+- [`docs/HARDWARE_PERFORMANCE.md`](docs/HARDWARE_PERFORMANCE.md): affinity, false sharing, contention, backoff, ordering, and counter evidence (includes per-worker statistics and full backoff matrix).
 - [`docs/INTERVIEW_NOTES.md`](docs/INTERVIEW_NOTES.md): questions grounded in the implementation.
 
 ## Limitations

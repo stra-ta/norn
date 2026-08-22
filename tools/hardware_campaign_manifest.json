@@ -73,7 +73,8 @@
       "queue": "mpmc",
       "producers": 1,
       "consumers": 1,
-      "placement": "unpinned"
+      "placement": "unpinned",
+      "items": 1000000
     },
     {
       "id": "h5-mpmc-2x2-unpinned",
@@ -82,7 +83,8 @@
       "queue": "mpmc",
       "producers": 2,
       "consumers": 2,
-      "placement": "unpinned"
+      "placement": "unpinned",
+      "items": 1000000
     },
     {
       "id": "h5-mpmc-4x4-unpinned",
@@ -91,7 +93,8 @@
       "queue": "mpmc",
       "producers": 4,
       "consumers": 4,
-      "placement": "unpinned"
+      "placement": "unpinned",
+      "items": 1000000
     },
     {
       "id": "h5-mpmc-2x2-distinct-core",
@@ -111,6 +114,7 @@
       "producers": 4,
       "consumers": 4,
       "placement": "unpinned",
+      "items": 1000000,
       "backoff": "yield"
     },
     {
@@ -121,6 +125,7 @@
       "producers": 4,
       "consumers": 4,
       "placement": "unpinned",
+      "items": 1000000,
       "backoff": "bounded"
     },
     {
@@ -131,7 +136,74 @@
       "producers": 4,
       "consumers": 4,
       "placement": "unpinned",
+      "items": 1000000,
       "backoff": "exponential"
+    },
+    {
+      "id": "h6-mpmc-1x1-yield",
+      "milestone": "H6",
+      "question": "How does yielding trade throughput for CPU and scheduling behavior under 1x1 MPMC backoff?",
+      "queue": "mpmc",
+      "producers": 1,
+      "consumers": 1,
+      "placement": "unpinned",
+      "backoff": "yield",
+      "items": 1000000
+    },
+    {
+      "id": "h6-mpmc-1x1-bounded",
+      "milestone": "H6",
+      "question": "How does bounded spinning then yielding trade throughput for CPU and scheduling behavior under 1x1 MPMC backoff?",
+      "queue": "mpmc",
+      "producers": 1,
+      "consumers": 1,
+      "placement": "unpinned",
+      "backoff": "bounded",
+      "items": 1000000
+    },
+    {
+      "id": "h6-mpmc-1x1-exponential",
+      "milestone": "H6",
+      "question": "How does small exponential backoff trade throughput for CPU and scheduling behavior under 1x1 MPMC backoff?",
+      "queue": "mpmc",
+      "producers": 1,
+      "consumers": 1,
+      "placement": "unpinned",
+      "backoff": "exponential",
+      "items": 1000000
+    },
+    {
+      "id": "h6-mpmc-2x2-yield",
+      "milestone": "H6",
+      "question": "How does yielding trade throughput for CPU and scheduling behavior under 2x2 MPMC backoff?",
+      "queue": "mpmc",
+      "producers": 2,
+      "consumers": 2,
+      "placement": "unpinned",
+      "backoff": "yield",
+      "items": 1000000
+    },
+    {
+      "id": "h6-mpmc-2x2-bounded",
+      "milestone": "H6",
+      "question": "How does bounded spinning then yielding trade throughput for CPU and scheduling behavior under 2x2 MPMC backoff?",
+      "queue": "mpmc",
+      "producers": 2,
+      "consumers": 2,
+      "placement": "unpinned",
+      "backoff": "bounded",
+      "items": 1000000
+    },
+    {
+      "id": "h6-mpmc-2x2-exponential",
+      "milestone": "H6",
+      "question": "How does small exponential backoff trade throughput for CPU and scheduling behavior under 2x2 MPMC backoff?",
+      "queue": "mpmc",
+      "producers": 2,
+      "consumers": 2,
+      "placement": "unpinned",
+      "backoff": "exponential",
+      "items": 1000000
     },
     {
       "id": "h7-spsc-seq-cst-unpinned",

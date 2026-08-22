@@ -58,6 +58,7 @@ struct sample {
   double producer_fairness = 0.0;
   double consumer_fairness = 0.0;
   bool complete = false;
+  std::vector<worker_stats> workers;
 };
 
 struct backoff {
@@ -384,6 +385,7 @@ std::pair<std::vector<sample>, std::vector<norn::benchmark_support::affinity_res
     }
     current.producer_fairness = jain_fairness(stats, 0, config.producers, true);
     current.consumer_fairness = jain_fairness(stats, config.producers, config.consumers, false);
+    current.workers = stats;
     current.complete = current.pushes == config.producers * config.items &&
                        current.pops == config.producers * config.items;
     if (repetition > config.warmups) {
@@ -470,8 +472,20 @@ void print_results(const options& config, const std::vector<sample>& samples,
               << ",\"yields\":" << current.yields << ",\"spin_steps\":" << current.spin_steps
               << ",\"producer_fairness\":" << current.producer_fairness
               << ",\"consumer_fairness\":" << current.consumer_fairness
-              << ",\"complete\":" << (current.complete ? "true" : "false") << '}';
-  }
+              << ",\"complete\":" << (current.complete ? "true" : "false") << ",\"workers\":[";
+    for (std::size_t worker_index = 0; worker_index < current.workers.size(); ++worker_index) {
+      const worker_stats& worker = current.workers[worker_index];
+      if (worker_index != 0U) {
+        std::cout << ',';
+      }
+      std::cout << "{\"worker\":" << worker_index << ",\"role\":";
+      print_json_string(worker_index < config.producers ? "producer" : "consumer");
+      std::cout << ",\"pushes\":" << worker.pushes << ",\"pops\":" << worker.pops
+                << ",\"retries\":" << worker.retries << ",\"yields\":" << worker.yields
+                << ",\"spin_steps\":" << worker.spin_steps << '}';
+    }
+    std::cout << "]}";
+   }
   std::cout << "]}\n";
 }
 

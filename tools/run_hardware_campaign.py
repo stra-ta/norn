@@ -111,9 +111,22 @@ def environment() -> dict[str, object]:
     return data
 
 
-def choose_placement(placement: str, topology: dict[str, object]) -> tuple[list[int], list[int], str | None]:
+def choose_placement(
+    placement: str,
+    topology: dict[str, object],
+    producers: int = 1,
+    consumers: int = 1,
+) -> tuple[list[int], list[int], str | None]:
     if placement == "unpinned":
         return [], [], None
+    # distinct-core / distinct-cpu pin a single CPU per role. Until the placement
+    # strategy can distribute multiple workers across distinct cores, a pinned
+    # multi-producer or multi-consumer case must not be silently reported as
+    # distinct-core placement.
+    if placement in ("distinct-core", "distinct-cpu") and (producers > 1 or consumers > 1):
+        return [], [], (
+            f"{placement} placement does not yet support multiple producers or consumers"
+        )
     allowed = topology.get("allowed_cpus")
     cpus = topology.get("cpus")
     if not isinstance(allowed, list) or not isinstance(cpus, dict) or not allowed:
@@ -229,6 +242,11 @@ def summary(samples: list[dict[str, object]]) -> dict[str, object]:
     sorted_values = sorted(values)
     middle = len(sorted_values) // 2
     median = sorted_values[middle] if len(sorted_values) % 2 else (sorted_values[middle - 1] + sorted_values[middle]) / 2
+    retries = [float(sample["retries"]) for sample in samples]
+    yields = [float(sample["yields"]) for sample in samples]
+    spin_steps = [float(sample["spin_steps"]) for sample in samples]
+    producer_fairness = [float(sample["producer_fairness"]) for sample in samples]
+    consumer_fairness = [float(sample["consumer_fairness"]) for sample in samples]
     return {
         "sample_count": len(samples),
         "throughput_median_items_per_second": median,
@@ -237,6 +255,11 @@ def summary(samples: list[dict[str, object]]) -> dict[str, object]:
         "throughput_mean_items_per_second": statistics.fmean(values),
         "throughput_population_stdev_items_per_second": statistics.pstdev(values),
         "all_complete": all(bool(sample["complete"]) for sample in samples),
+        "retry_median": statistics.median(retries),
+        "yield_median": statistics.median(yields),
+        "spin_steps_median": statistics.median(spin_steps),
+        "producer_fairness_median": statistics.median(producer_fairness),
+        "consumer_fairness_median": statistics.median(consumer_fairness),
     }
 
 
@@ -294,7 +317,9 @@ def main() -> int:
         producer_cpus: list[int] = []
         consumer_cpus: list[int] = []
         if platform.system() == "Linux":
-            producer_cpus, consumer_cpus, reason = choose_placement(case["placement"], machine["topology"])
+            producer_cpus, consumer_cpus, reason = choose_placement(
+                case["placement"], machine["topology"], case["producers"], case["consumers"]
+            )
             if reason is not None:
                 record["reason"] = reason
                 records.append(record)

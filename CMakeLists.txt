@@ -57,6 +57,11 @@ if(NORN_BUILD_TESTS)
     add_test(
       NAME hardware_campaign_tool
       COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/hardware_campaign_tool_test.py)
+    # Output-contract test for the hardware benchmark binary JSON. Verifies
+    # completeness and worker statistics; skipped when benchmarks are not built.
+    add_test(
+      NAME hardware_binary_json_contract
+      COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/hardware_campaign_tool_test.py --contract)
   endif()
 endif()
 
