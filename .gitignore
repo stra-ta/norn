@@ -6,3 +6,4 @@ compile_commands.json
 *.csv
 *.prof
 *.trace
+__pycache__/
