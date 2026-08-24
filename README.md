@@ -1,6 +1,6 @@
 # Norn
 
-[![CI](https://github.com/wheevu/norn/actions/workflows/ci.yml/badge.svg)](https://github.com/wheevu/norn/actions/workflows/ci.yml)
+[![CI](https://github.com/stra-ta/norn/actions/workflows/ci.yml/badge.svg)](https://github.com/stra-ta/norn/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Norn is a low-level C++20 concurrency and memory-management library for latency-sensitive systems.
