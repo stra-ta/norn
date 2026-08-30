@@ -92,6 +92,7 @@ class HardwareCampaignToolTest(unittest.TestCase):
         samples = [
             {
                 "throughput_items_per_second": 100.0,
+                "ns_per_item": 10.0,
                 "complete": True,
                 "retries": 4,
                 "yields": 1,
@@ -101,6 +102,7 @@ class HardwareCampaignToolTest(unittest.TestCase):
             },
             {
                 "throughput_items_per_second": 200.0,
+                "ns_per_item": 5.0,
                 "complete": True,
                 "retries": 6,
                 "yields": 3,
@@ -110,6 +112,7 @@ class HardwareCampaignToolTest(unittest.TestCase):
             },
             {
                 "throughput_items_per_second": 300.0,
+                "ns_per_item": 2.5,
                 "complete": True,
                 "retries": 8,
                 "yields": 5,
@@ -124,6 +127,9 @@ class HardwareCampaignToolTest(unittest.TestCase):
         self.assertEqual(summary["spin_steps_median"], 20)
         self.assertAlmostEqual(summary["producer_fairness_median"], 0.7)
         self.assertAlmostEqual(summary["consumer_fairness_median"], 0.6)
+        self.assertAlmostEqual(summary["latency_ns_per_item_median"], 5.0)
+        self.assertAlmostEqual(summary["latency_ns_per_item_p95"], 9.5)
+        self.assertAlmostEqual(summary["latency_ns_per_item_p99"], 9.9)
         # Backward-compatible keys remain intact.
         self.assertEqual(summary["sample_count"], 3)
         self.assertTrue(summary["all_complete"])

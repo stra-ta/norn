@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
+#include <cstdint>
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -362,4 +364,18 @@ TEST_CASE("sequence comparison classifies near-wrap values") {
   REQUIRE(norn::detail::sequence_relation(max - 1, max) == -1);
   REQUIRE(norn::detail::sequence_relation(half, 0) == -1);
   REQUIRE(norn::detail::sequence_relation(half - 1, 0) == 1);
+}
+
+TEST_CASE("sequence comparison model covers reduced-width wraparound") {
+  using counter = std::uint8_t;
+  constexpr counter max = std::numeric_limits<counter>::max();
+  constexpr counter half = static_cast<counter>(counter{1} << 7);
+
+  REQUIRE(norn::detail::sequence_relation<counter>(counter{5}, counter{5}) == 0);
+  REQUIRE(norn::detail::sequence_relation<counter>(counter{6}, counter{5}) == 1);
+  REQUIRE(norn::detail::sequence_relation<counter>(counter{4}, counter{5}) == -1);
+  REQUIRE(norn::detail::sequence_relation<counter>(counter{0}, max) == 1);
+  REQUIRE(norn::detail::sequence_relation<counter>(max, counter{0}) == -1);
+  REQUIRE(norn::detail::sequence_relation<counter>(half, counter{0}) == -1);
+  REQUIRE(norn::detail::sequence_relation<counter>(static_cast<counter>(half - 1), counter{0}) == 1);
 }

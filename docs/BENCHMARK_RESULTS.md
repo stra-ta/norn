@@ -1,6 +1,10 @@
 # Benchmark Results
 
-The measured comparison of Norn's queue structures on one machine.
+This is a historical comparison of Norn's queue structures on one machine.
+The source values are committed in
+[`docs/evidence/benchmarks/legacy-5d73d0eb.json`](evidence/benchmarks/legacy-5d73d0eb.json).
+The source commit is not the current repository commit, so this page is not a
+current-performance claim.
 
 ## Environment
 
@@ -48,3 +52,9 @@ cycles-per-operation claims. The hazard-pointer config is MPSC 1x1 because the
 demonstration vehicle is MPSC by contract. Re-run with
 `tools/run_benchmark.py` on explicitly identified hardware before treating any
 number as portable.
+
+The steady-state hardware runner records one aggregate `ns_per_item` value per
+sample.
+Its campaign summary reports median, p95, and p99 of those sample values.
+Those are run-level elapsed-time summaries, not per-operation tail-latency
+measurements.

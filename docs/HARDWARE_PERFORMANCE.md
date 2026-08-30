@@ -29,6 +29,8 @@ Case order is randomized from a recorded seed.
 Every run records the exact command, commit, dirty state, compiler, OS, kernel, CPU count, topology, placement read-back, process CPU time, voluntary and involuntary context switches, per-sample retries, yields, spin steps, fairness, throughput, and per-item elapsed cost.
 
 The runner reports a median, mean, population standard deviation, minimum, and maximum without discarding samples.
+It also reports median, p95, and p99 of the per-sample aggregate `ns_per_item` values.
+These are run-level timing summaries rather than per-operation latency distributions.
 It marks failed operation totals or failed required affinity read-back as invalid.
 Performance results never participate in CTest pass or fail criteria.
 
@@ -119,6 +121,8 @@ There is no relaxed experimental variant in the normal benchmark targets.
 ## Perf and counter availability
 
 The requested compact `perf stat` event set is cycles, instructions, branches, branch misses, cache references, cache misses, context switches, CPU migrations, and task clock.
+When counters are available, the raw record is the input for cycles-per-item and
+cache-miss-per-item analysis.
 Native macOS has no `perf` tool in this campaign.
 The Ubuntu ARM64 VM has `perf`, but all requested events are blocked by `perf_event_paranoid=4`.
 The pilot therefore reports each counter unavailable instead of inventing cache-miss or instruction-cost explanations.
@@ -143,4 +147,6 @@ That disagreement is evidence against a universal performance claim, not a reaso
 - Repeat the native M1 SPSC and backoff cases under low host load with more randomized interleaving.
 - Run the Linux manifest on bare metal with accessible perf events before attributing differences to cache misses or migrations.
 - Add an explicitly labeled x86-64 bare-metal or dedicated-host campaign.
+- Add operation-level latency sampling before presenting queue latency tails as
+  p99 user-visible latency.
 - Keep VM and hosted-CI output as functional and scheduler-control evidence only.

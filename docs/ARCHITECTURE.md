@@ -20,8 +20,10 @@ The shipped library lives under `include/norn/`:
 - `core/cache_line.hpp`, `core/alignment.hpp`, `core/atomic.hpp`, `core/cpu_relax.hpp`, and `core/backoff.hpp` provide the cache-line constant, `cache_aligned<T>`, `isolated_atomic<T>`, `cpu_relax()`, and the backoff policies (`tight`, `yield`, `bounded`, `exponential`).
 - `queue/spsc_ring.hpp` provides the bounded SPSC ring and its padded and seq-cst variants.
 - `queue/mpmc_ring.hpp` provides the bounded MPMC sequence-number ring.
-- `queue/mpsc_linked_queue.hpp` provides the canonical MPSC name as an alias for `mpsc_queue` in `hazard_pointer.hpp`.
-- `hazard_pointer.hpp` provides `hazard_domain`, `hazard_record`, `hazard_ptr`, and the `mpsc_queue` implementation; decomposing this file into its own area is future work.
+- `hazard/domain.hpp` provides the reusable registration, hazard-slot, and reclamation domain primitives.
+- `hazard/pointer.hpp` provides the RAII `hazard_ptr<T, Index>` guard.
+- `queue/mpsc_linked_queue.hpp` provides the canonical MPSC linked queue and its `mpsc_linked_queue` alias.
+- `hazard_pointer.hpp` remains a compatibility umbrella for code that included the 0.1 header.
 - `mutex_queue.hpp` provides the blocking reference queues.
 - `spsc_queue.hpp`, `mpmc_queue.hpp`, and `cache_line.hpp` are compatibility headers that alias the 0.1 names to the canonical types.
 
@@ -34,7 +36,7 @@ Design notes, correctness-campaign results, and benchmark evidence live in `docs
 There are three real paths today, and each is deliberate:
 
 - The bounded rings (`spsc_ring`, `mpmc_ring`) pre-allocate all storage at construction, perform no per-operation allocation, and manage object lifetimes explicitly; destruction drains remaining items and requires quiescence.
-- `mpsc_linked_queue` allocates a heap node per push and defers reclamation through hazard pointers against an explicit caller-owned `norn::hazard_domain`; retirement triggers scans once a threshold is reached.
+- `mpsc_linked_queue` allocates a heap node per push from a caller-selected `std::pmr::memory_resource` and defers reclamation through hazard pointers against an explicit caller-owned `norn::hazard_domain`; retirement triggers scans once a threshold is reached.
 - The mutex queues use `std::deque` behind a mutex and condition variables, prioritizing clarity over performance.
 
 ## Progress guarantees
@@ -81,14 +83,14 @@ A lab experiment graduates into the shipped library when it satisfies four condi
 4. Performance claims are backed by measured evidence from the lab.
 
 Until all four hold, the work stays in the lab.
-Decomposing hazard pointers out of `norn/hazard_pointer.hpp` is the next candidate under this rule.
+The hazard primitives now meet the area-directory condition through
+`include/norn/hazard/`, while the umbrella header remains for compatibility.
 
 ## Future work
 
 Planned items, none of which exist yet in the shipped surface:
 
 - A physical separation of the lab (benchmarks, campaigns, tooling) from the installable library tree.
-- Decomposition of hazard pointers out of `norn/hazard_pointer.hpp`.
 - Memory pools.
 - Channels.
 - Wait strategies beyond the current backoff policies.

@@ -1,5 +1,7 @@
 /build/
-/results/
+/results/*
+!/results/
+!/results/manifest.json
 .cache/
 compile_commands.json
 *.jsonl

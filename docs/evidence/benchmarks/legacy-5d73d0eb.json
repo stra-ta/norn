@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "id": "legacy-queue-comparison-5d73d0eb",
+  "status": "historical",
+  "provenance": {
+    "commit": "5d73d0eb",
+    "dirty": false,
+    "compiler": "Apple Clang 21.0.0",
+    "kernel": "Darwin 26.5.2",
+    "cpu": "Apple M1",
+    "architecture": "arm64",
+    "build_type": "Release",
+    "seed": null,
+    "command": [
+      "python3",
+      "tools/run_benchmark.py",
+      "--binary",
+      "build/release/norn_benchmarks",
+      "--output",
+      "results/queue-comparison.json",
+      "--compiler",
+      "c++",
+      "--build-type",
+      "Release"
+    ]
+  },
+  "workload": {
+    "batch_items": 100000,
+    "queue_capacity": 1024,
+    "includes_thread_setup": true
+  },
+  "measurements": [
+    {"structure": "Bounded mutex queue", "configuration": "single-thread push/pop", "ns_per_item": 68.1, "items_per_second": 14680000.0},
+    {"structure": "SPSC ring", "configuration": "unpadded", "ns_per_item": 73.3, "items_per_second": 13640000.0},
+    {"structure": "SPSC ring", "configuration": "padded", "ns_per_item": 59.5, "items_per_second": 16810000.0},
+    {"structure": "MPMC ring", "configuration": "1x1", "ns_per_item": 32.7, "items_per_second": 30560000.0},
+    {"structure": "MPMC ring", "configuration": "2x2", "ns_per_item": 152.7, "items_per_second": 6550000.0},
+    {"structure": "MPMC ring", "configuration": "4x4", "ns_per_item": 168.2, "items_per_second": 5950000.0},
+    {"structure": "Hazard-pointer queue", "configuration": "MPSC, 1x1", "ns_per_item": 194.6, "items_per_second": 5140000.0}
+  ]
+}

@@ -239,9 +239,21 @@ def summary(samples: list[dict[str, object]]) -> dict[str, object]:
     if not samples:
         return {"status": "no-samples"}
     values = [float(sample["throughput_items_per_second"]) for sample in samples]
+    latency = [float(sample["ns_per_item"]) for sample in samples]
     sorted_values = sorted(values)
     middle = len(sorted_values) // 2
     median = sorted_values[middle] if len(sorted_values) % 2 else (sorted_values[middle - 1] + sorted_values[middle]) / 2
+
+    def percentile(sorted_values: list[float], probability: float) -> float:
+        if len(sorted_values) == 1:
+            return sorted_values[0]
+        position = (len(sorted_values) - 1) * probability
+        lower = int(position)
+        upper = min(lower + 1, len(sorted_values) - 1)
+        fraction = position - lower
+        return sorted_values[lower] + fraction * (sorted_values[upper] - sorted_values[lower])
+
+    sorted_latency = sorted(latency)
     retries = [float(sample["retries"]) for sample in samples]
     yields = [float(sample["yields"]) for sample in samples]
     spin_steps = [float(sample["spin_steps"]) for sample in samples]
@@ -254,6 +266,9 @@ def summary(samples: list[dict[str, object]]) -> dict[str, object]:
         "throughput_max_items_per_second": max(values),
         "throughput_mean_items_per_second": statistics.fmean(values),
         "throughput_population_stdev_items_per_second": statistics.pstdev(values),
+        "latency_ns_per_item_median": percentile(sorted_latency, 0.50),
+        "latency_ns_per_item_p95": percentile(sorted_latency, 0.95),
+        "latency_ns_per_item_p99": percentile(sorted_latency, 0.99),
         "all_complete": all(bool(sample["complete"]) for sample in samples),
         "retry_median": statistics.median(retries),
         "yield_median": statistics.median(yields),

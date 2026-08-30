@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "repository": "stra-ta/norn",
+  "artifact_root": "results/",
+  "status": "convention-only",
+  "required_provenance": [
+    "commit",
+    "dirty",
+    "compiler",
+    "kernel",
+    "cpu",
+    "architecture",
+    "build_type",
+    "seed",
+    "command"
+  ],
+  "artifact_rules": {
+    "raw_evidence": "Keep raw benchmark or campaign output immutable and ignored when it contains host-specific detail.",
+    "summary": "Commit only a reviewed summary that names its source artifact and preserves the source commit.",
+    "generated_figures": "Regenerate figures from committed raw or curated evidence and fail CI when output differs."
+  },
+  "committed_evidence": [
+    {
+      "path": "docs/evidence/hardware/2026-08-22-pilot/summary.json",
+      "kind": "hardware-summary",
+      "source": "historical pilot output",
+      "provenance": {
+        "commit": "6f4583454b23b80661a8cb51487903e86e939c04",
+        "dirty": false,
+        "compiler": "Apple Clang 21.0.0",
+        "kernel": "Darwin 26.5.2",
+        "cpu": "Apple M1",
+        "architecture": "arm64",
+        "build_type": "Release",
+        "seed": 20260822,
+        "command": [
+          "python3",
+          "tools/run_hardware_campaign.py",
+          "--manifest",
+          "tools/hardware_campaign_manifest.json"
+        ]
+      }
+    },
+    {
+      "path": "docs/evidence/benchmarks/legacy-5d73d0eb.json",
+      "kind": "benchmark-input",
+      "source": "legacy queue comparison",
+      "provenance": {
+        "commit": "5d73d0eb",
+        "dirty": false,
+        "compiler": "Apple Clang 21.0.0",
+        "kernel": "Darwin 26.5.2",
+        "cpu": "Apple M1",
+        "architecture": "arm64",
+        "build_type": "Release",
+        "seed": null,
+        "command": [
+          "python3",
+          "tools/run_benchmark.py",
+          "--binary",
+          "build/release/norn_benchmarks"
+        ]
+      },
+      "generated": [
+        "docs/BENCHMARKS.svg"
+      ],
+      "generator": "tools/generate_benchmark_figure.py"
+    }
+  ]
+}

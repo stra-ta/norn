@@ -14,7 +14,10 @@ reclamation scheme.
 Hazard pointers are needed for unbounded, node-based structures where nodes are
 individually allocated and freed.
 
-This milestone is the project's one documented memory-reclamation implementation.
+The reusable domain and guard implementations live in
+`include/norn/hazard/domain.hpp` and `include/norn/hazard/pointer.hpp`.
+`include/norn/queue/mpsc_linked_queue.hpp` contains the queue, while
+`include/norn/hazard_pointer.hpp` preserves the 0.1 umbrella include.
 
 ## What hazard pointers are
 
@@ -129,13 +132,16 @@ retired list, and provides retire and scan.
 All mutation of that state goes through a single `std::mutex` (`mu_`).
 
 - `register_thread() -> hazard_record&` returns the calling thread's existing
-  `thread_local` record when it is already registered with this domain;
-  otherwise it allocates a fresh record and appends it to the active list under
-  the mutex.
-- `deregister_thread()` removes the record from the active list, transfers any
-  record-local retired entries to the domain's shared retired list, clears the
-  record's domain pointer, and moves the record to the zombie list, all under
-  the mutex.
+  record when it is already registered with this domain.
+  It throws `std::logic_error` if the thread is still registered with another
+  domain, which makes domain switching explicit and prevents an orphaned active
+  record.
+- `deregister_thread() -> bool` removes the record from the active list,
+  transfers any record-local retired entries to the domain's shared retired
+  list, clears the record's domain pointer, and moves the record to the zombie
+  list, all under the mutex.
+  It returns `false` while either no record is active for this domain or a guard
+  still protects a slot.
 - `retire(void* ptr, void(*deleter)(void*) noexcept)` appends the pair to the
   domain's shared retired list under the mutex and automatically runs
   `scan_locked()` once that list reaches
@@ -154,8 +160,8 @@ retirement, and scan passes, not the readers' protect and clear path.
 
 Per-thread state registered with a domain.
 Contains exactly two `std::atomic<void*>` hazard slots
-(`hazard_record::kSlots == 2`), matching the Michael-Scott-derived pop path's
-dual protection.
+(`hazard_record::slot_count == 2`), matching the Michael-Scott-derived pop
+path's dual protection.
 Heap-allocated by the domain at registration and owned by the domain until domain
 destruction.
 The record is not copyable or movable.
@@ -163,7 +169,11 @@ Only the owning thread may publish or clear hazard slots.
 
 `protect<Index, T>(std::atomic<void*>& source) -> T*` performs the five-step
 publication protocol described above.
-`clear<int Index>()` stores null into the slot (relaxed order).
+`hazard_ptr<T, Index>` claims the selected slot before calling `protect` and
+releases it in its destructor.
+Constructing another guard for an occupied slot throws `std::logic_error`.
+`clear<int Index>()` stores null into the slot (relaxed order) and releases its
+claim.
 
 The record also exposes a public `retired_` vector with a matching
 `retire_entry` helper.
@@ -172,8 +182,8 @@ Nothing in the current queue appends to it during normal operation, since
 transfer surface that `deregister_thread()` drains into the domain's retired
 list.
 
-Records are created via `thread_local` storage: each thread has a lazily-allocated
-record that is registered with the domain on first use.
+Records are heap allocated lazily on first use and the calling thread keeps one
+thread-local pointer to its active record.
 The domain maintains two lists under its mutex: an active list
 (scanned) and a zombie list (deregistered records awaiting domain destruction).
 Deregistration removes a record from the active list, transfers its retired nodes
@@ -186,7 +196,8 @@ the owning thread has exited and will not dereference any protected pointer.
 ### `norn::hazard_ptr<T>`
 
 RAII guard protecting a single pointer via a hazard slot.
-Construction calls `record.protect(source)`; destruction calls `record.clear()`.
+Construction claims one slot and calls `record.protect(source)`; destruction
+calls `record.clear()`.
 `get()` returns the typed pointer.
 
 Not copyable or movable: moving would require transferring the hazard slot
@@ -209,9 +220,11 @@ Deleters are `void(*)(void*) noexcept`.
 If a custom deleter cannot be noexcept, the caller wraps it in a noexcept lambda
 that static_asserts or documents the constraint.
 
-Thread deregistration: when a thread exits, `deregister_thread()` is called.
-Its retired nodes are transferred to the domain for reclamation during the next
-scan by another thread.
+Thread deregistration must happen before a thread exits.
+If a guard is still active, `deregister_thread()` returns `false` and leaves the
+record active so the caller can release the guard and retry.
+After successful deregistration, its retired nodes are transferred to the
+domain for reclamation during the next scan by another thread.
 Records remain stable during scans because the domain owns every active and
 zombie record until domain destruction, and `scan_locked()` runs under the same
 mutex as registration and deregistration changes.
@@ -239,9 +252,15 @@ sentinel node can be constructed without a valid `T` value:
 ```cpp
 struct node {
   alignas(T) std::byte storage[sizeof(T)];
-  std::atomic<node*> next{nullptr};
+  std::atomic<void*> next{nullptr};
+  std::pmr::memory_resource* resource;
 };
 ```
+
+The queue uses `std::pmr::memory_resource::allocate` and `deallocate` for
+nodes.
+The default is `std::pmr::new_delete_resource()`, and tests inject a failing or
+tracking resource to exercise allocation and cleanup paths.
 
 ### Sentinel
 
@@ -321,6 +340,12 @@ validated successor of null (step d above) means no real node is linked.
 - A `hazard_domain` passed to an `mpsc_queue` must outlive the queue and
   every operation on it; the queue stores a plain reference and registers
   threads with the domain lazily on the first `try_push` or `try_pop`.
+- A thread can have one active domain registration at a time.
+  Call `deregister_thread()` before registering with another domain.
+- `mpsc_queue` accepts an optional `std::pmr::memory_resource`.
+  The resource must outlive the queue and all deferred reclamation.
+  Allocation failure propagates as `std::bad_alloc`, while payload construction
+  failure releases its node before rethrowing.
 - Destruction must be quiescent: no pushes or pops may be in flight while the
   queue or its domain is destroyed.
   The domain destructor reclaims all retired-but-unreclaimed entries and
@@ -361,6 +386,12 @@ validated successor of null (step d above) means no real node is linked.
 - Deleter exactly-once: every retired node's deleter is called exactly once.
 - TOCTOU test: one thread holds a hazard_ptr while another retires and scans;
   the scanner must retain the protected node.
+- Slot exhaustion: both record slots can be held at once, and a duplicate slot
+  claim is rejected.
+- Lifecycle rejection: deregistration with an active guard and switching to a
+  second domain without deregistration are both rejected.
+- Allocator failure: node allocation failure leaves the queue empty, and a
+  throwing payload constructor releases its node before rethrowing.
 - ASan, UBSan, and TSan verification.
 - Weakened-order educational variant in disposable scratch (M5 pattern).
 
@@ -391,4 +422,5 @@ validated successor of null (step d above) means no real node is linked.
   escape hatch.
 - `void(*)(void*) noexcept` deleters.
 - Non-movable hazard_ptr.
-- All three HP types in `include/norn/hazard_pointer.hpp`.
+- The reusable domain and guard types in `include/norn/hazard/`.
+- `include/norn/hazard_pointer.hpp` remains an umbrella compatibility header.

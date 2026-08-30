@@ -20,13 +20,31 @@ namespace detail {
 // view), and -1 when it is behind (slot not available in this pass).
 // Legitimate differences stay far below half the size_t range because the
 // queue capacity is constrained to that bound.
-[[nodiscard]] inline int sequence_relation(std::size_t sequence, std::size_t position) noexcept {
-  const std::size_t diff = sequence - position;
+template <typename Counter>
+[[nodiscard]] inline int sequence_relation_unsigned(Counter sequence,
+                                                    Counter position) noexcept {
+  static_assert(std::is_unsigned_v<Counter>);
+  const Counter diff = static_cast<Counter>(sequence - position);
   if (diff == 0) {
     return 0;
   }
-  constexpr std::size_t half = std::size_t{1} << (std::numeric_limits<std::size_t>::digits - 1);
+  constexpr Counter half = static_cast<Counter>(
+      Counter{1} << (std::numeric_limits<Counter>::digits - 1));
   return diff < half ? 1 : -1;
+}
+
+[[nodiscard]] inline int sequence_relation(std::size_t sequence,
+                                           std::size_t position) noexcept {
+  return sequence_relation_unsigned(sequence, position);
+}
+
+template <typename Counter, typename Position,
+          std::enable_if_t<std::is_unsigned_v<Counter> &&
+                               std::is_integral_v<Position>,
+                           int> = 0>
+[[nodiscard]] inline int sequence_relation(Counter sequence,
+                                           Position position) noexcept {
+  return sequence_relation_unsigned(sequence, static_cast<Counter>(position));
 }
 
 }  // namespace detail

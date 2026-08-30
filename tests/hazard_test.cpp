@@ -1,11 +1,71 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <atomic>
+#include <cstddef>
 #include <memory>
+#include <memory_resource>
+#include <new>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
 #include "norn/hazard_pointer.hpp"
+
+namespace {
+
+class tracking_resource final : public std::pmr::memory_resource {
+ public:
+  explicit tracking_resource(std::size_t successful_allocations,
+                             bool fail_after_limit = true)
+      : successful_allocations_(successful_allocations),
+        fail_after_limit_(fail_after_limit) {}
+
+  [[nodiscard]] std::size_t live_allocations() const noexcept { return live_; }
+
+ private:
+  void* do_allocate(std::size_t bytes, std::size_t alignment) override {
+    if (fail_after_limit_ && allocations_ >= successful_allocations_) {
+      throw std::bad_alloc();
+    }
+    void* pointer = std::pmr::new_delete_resource()->allocate(bytes, alignment);
+    ++allocations_;
+    ++live_;
+    return pointer;
+  }
+
+  void do_deallocate(void* pointer, std::size_t bytes,
+                    std::size_t alignment) override {
+    std::pmr::new_delete_resource()->deallocate(pointer, bytes, alignment);
+    --live_;
+  }
+
+  bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+    return this == &other;
+  }
+
+  std::size_t successful_allocations_;
+  bool fail_after_limit_;
+  std::size_t allocations_ = 0;
+  std::size_t live_ = 0;
+};
+
+struct throwing_value {
+  explicit throwing_value(int) { throw std::bad_alloc(); }
+  throwing_value(const throwing_value&) = delete;
+  throwing_value& operator=(const throwing_value&) = delete;
+  throwing_value(throwing_value&&) noexcept = default;
+  throwing_value& operator=(throwing_value&&) noexcept = default;
+  ~throwing_value() noexcept = default;
+};
+
+std::atomic<int> deleted_values{0};
+
+void count_and_delete(void* pointer) noexcept {
+  ++deleted_values;
+  delete static_cast<int*>(pointer);
+}
+
+}  // namespace
 
 TEST_CASE("hazard_ptr publishes and clears correctly") {
   norn::hazard_domain domain;
@@ -40,6 +100,94 @@ TEST_CASE("hazard_ptr retries on concurrent modification") {
   norn::hazard_ptr<int, 0> guard(rec, source);
   // guard should now point to &b, not &a.
   REQUIRE(guard.get() == &b);
+}
+
+TEST_CASE("hazard records expose two exclusive slots") {
+  STATIC_REQUIRE(norn::hazard_record::slot_count == 2);
+  norn::hazard_domain domain;
+  auto& record = domain.register_thread();
+  std::atomic<void*> source;
+  int first = 1;
+  int second = 2;
+  source.store(&first, std::memory_order_relaxed);
+
+  norn::hazard_ptr<int, 0> first_guard(record, source);
+  source.store(&second, std::memory_order_relaxed);
+  norn::hazard_ptr<int, 1> second_guard(record, source);
+  REQUIRE(first_guard.get() == &first);
+  REQUIRE(second_guard.get() == &second);
+  REQUIRE(record.has_active_hazards());
+  REQUIRE_THROWS_AS((norn::hazard_ptr<int, 0>(record, source)),
+                    std::logic_error);
+}
+
+TEST_CASE("hazard domain refuses deregistration while a slot is protected") {
+  norn::hazard_domain domain;
+  auto& record = domain.register_thread();
+  std::atomic<void*> source;
+  int value = 7;
+  source.store(&value, std::memory_order_relaxed);
+
+  {
+    norn::hazard_ptr<int> guard(record, source);
+    REQUIRE_FALSE(domain.deregister_thread());
+    REQUIRE(domain.thread_count() == 1);
+  }
+
+  REQUIRE(domain.deregister_thread());
+  REQUIRE(domain.thread_count() == 0);
+  REQUIRE_FALSE(domain.deregister_thread());
+}
+
+TEST_CASE("hazard domain rejects switching domains without deregistration") {
+  norn::hazard_domain first;
+  norn::hazard_domain second;
+  (void)first.register_thread();
+
+  REQUIRE_THROWS_AS(second.register_thread(), std::logic_error);
+  REQUIRE(first.deregister_thread());
+  (void)second.register_thread();
+  REQUIRE(second.deregister_thread());
+}
+
+TEST_CASE("hazard scans defer reclamation while a slot is protected") {
+  deleted_values.store(0, std::memory_order_relaxed);
+  norn::hazard_domain domain;
+  auto& record = domain.register_thread();
+  std::atomic<void*> source;
+  auto* value = new int(42);
+  source.store(value, std::memory_order_relaxed);
+
+  {
+    norn::hazard_ptr<int> guard(record, source);
+    domain.retire(value, count_and_delete);
+    domain.scan();
+    REQUIRE(deleted_values.load(std::memory_order_relaxed) == 0);
+  }
+
+  domain.scan();
+  REQUIRE(deleted_values.load(std::memory_order_relaxed) == 1);
+  REQUIRE(domain.deregister_thread());
+}
+
+TEST_CASE("mpsc queue reports a node allocator failure without corrupting state") {
+  tracking_resource resource(1);
+  norn::hazard_domain domain;
+  norn::mpsc_queue<int> queue(domain, &resource);
+
+  REQUIRE_THROWS_AS(queue.try_push(1), std::bad_alloc);
+  REQUIRE(queue.empty());
+  REQUIRE(resource.live_allocations() == 1);
+}
+
+TEST_CASE("mpsc queue releases a node when value construction fails") {
+  tracking_resource resource(2, false);
+  norn::hazard_domain domain;
+  norn::mpsc_queue<throwing_value> queue(domain, &resource);
+
+  REQUIRE_THROWS_AS(queue.try_push(1), std::bad_alloc);
+  REQUIRE(queue.empty());
+  REQUIRE(resource.live_allocations() == 1);
 }
 
 TEST_CASE("mpsc_queue basic push and pop") {
