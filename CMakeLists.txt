@@ -116,6 +116,12 @@ if(NORN_BUILD_TESTS)
     add_test(
       NAME hardware_binary_json_contract
       COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/hardware_campaign_tool_test.py --contract)
+    add_test(
+      NAME memory_order_source_contract
+      COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/check_memory_order.py --self-test)
+    add_test(
+      NAME committed_evidence_contract
+      COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/check_evidence.py)
   endif()
 
   # External-consumer check: install this build into a private prefix, then
