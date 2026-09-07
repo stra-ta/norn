@@ -1,0 +1,47 @@
+{
+  "commit": "1089547d669791afcdad6b208f2696d2af282faa",
+  "limitations": [
+    "The native M1 host carried a 1-minute load average of 4.83 at campaign start, so sample spread remains broad (notably padded SPSC, 21M-54M) and the padding direction stays exploratory.",
+    "Linux-only placement cases were skipped on macOS; Linux evidence still rests on the 2026-08-22 pilot VM run.",
+    "No x86-64 performance sample was collected.",
+    "No perf counters were available, so retry counts and process rusage are not a decomposition into instructions, cache misses, or migrations."
+  ],
+  "m1_native": {
+    "environment": "Apple M1, Darwin 26.5.2, Apple Clang 21.0.0, 8 physical and 8 logical CPUs",
+    "host_load_at_start": [
+      4.826171875,
+      2.7822265625,
+      2.55126953125
+    ],
+    "label": "native hardware, scheduler-managed placement",
+    "mpmc_median_items_per_second": {
+      "1x1": 132633329.987,
+      "1x1_bounded": 132079319.443,
+      "1x1_exponential": 123078180.368,
+      "1x1_yield": 132082215.367,
+      "2x2": 16888070.538,
+      "2x2_bounded": 19468667.7394,
+      "2x2_exponential": 18257621.8359,
+      "2x2_yield": 17249260.438,
+      "4x4_bounded": 7383909.93268,
+      "4x4_exponential": 7397101.1223,
+      "4x4_tight": 6284144.67425,
+      "4x4_yield": 7262776.7272
+    },
+    "perf": "unavailable",
+    "spsc_median_items_per_second": {
+      "padded": 39845923.7819,
+      "seq_cst": 26779139.0507,
+      "unpadded": 31942932.0353
+    }
+  },
+  "method": {
+    "affinity": "scheduler-managed unpinned on macOS; Linux-only placements skipped",
+    "build_type": "Release",
+    "items_per_producer": "manifest default 100000; mpmc cases 1000000",
+    "order_seed": 20260822,
+    "repetitions": 9,
+    "warmups": 2
+  },
+  "schema_version": 1
+}

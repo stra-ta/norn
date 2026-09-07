@@ -42,6 +42,27 @@
       }
     },
     {
+      "path": "docs/evidence/hardware/2026-09-08-m1-refresh/summary.json",
+      "kind": "hardware-summary",
+      "source": "native M1 refresh of the committed manifest (Linux-only placements skipped)",
+      "provenance": {
+        "commit": "1089547d669791afcdad6b208f2696d2af282faa",
+        "dirty": false,
+        "compiler": "Apple Clang 21.0.0",
+        "kernel": "Darwin 26.5.2",
+        "cpu": "Apple M1",
+        "architecture": "arm64",
+        "build_type": "Release",
+        "seed": 20260822,
+        "command": [
+          "python3",
+          "tools/run_hardware_campaign.py",
+          "--manifest",
+          "tools/hardware_campaign_manifest.json"
+        ]
+      }
+    },
+    {
       "path": "docs/evidence/benchmarks/legacy-5d73d0eb.json",
       "kind": "benchmark-input",
       "source": "legacy queue comparison",

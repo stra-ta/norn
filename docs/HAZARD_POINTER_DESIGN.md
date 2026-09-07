@@ -55,6 +55,15 @@ pins only its explicitly protected nodes; a stalled EBR participant blocks
 reclamation of all later retirements.
 Hazard pointers pay per-access publication and O(N * H) scans; EBR pays a per-thread
 epoch announcement but amortizes the scan cost.
+The practical emphasis: prefer EBR by default wherever a bounded stall is
+acceptable, and reach for hazard pointers where an arbitrarily stalled thread
+must not block reclamation of nodes it never protected.
+
+Attribution: the register, protect, deregister, and scan vocabulary in this
+document is the library's own mapping of the hazard-pointer scheme introduced
+by Michael (2004), not a quotation of that paper.
+The barrier-after-HP-store rule in the publication protocol follows Fraser's
+PhD thesis, Section 5.3, not Michael (2004) alone.
 
 ## Publication protocol (the core correctness argument)
 

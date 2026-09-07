@@ -12,6 +12,8 @@ This avoids committing large traces or host-specific detail.
 The compact, curated pilot summary is [`docs/evidence/hardware/2026-08-22-pilot/summary.json`](evidence/hardware/2026-08-22-pilot/summary.json).
 
 The pilot started from clean commit `6f4583454b23b80661a8cb51487903e86e939c04`.
+The native M1 refresh ran from clean commit `1089547d669791afcdad6b208f2696d2af282faa`.
+Its curated summary is [`docs/evidence/hardware/2026-09-08-m1-refresh/summary.json`](evidence/hardware/2026-09-08-m1-refresh/summary.json).
 The baseline freeze was commit `64851af4a2a1667937e3a1cf1b526d0e66ce72dd`.
 At the freeze, default, Release, Debug, ASan, UBSan, and TSan built and passed all 33 existing tests on the native M1.
 The legacy benchmark run was recorded under `results/hardware/baseline-64851af4/`.
@@ -63,6 +65,20 @@ The Lima guest exposed four distinct vCPUs in one package with no SMT siblings a
 It is explicitly labeled virtualized.
 Its distinct-core pinning verifies Linux scheduling controls but cannot prove M1 physical cache, package, or NUMA effects.
 
+## Evidence currency
+
+Hardware evidence is refreshed on a scoped rule, so sessions do not relitigate it.
+Before a campaign re-run, diff each evidence pin named in `results/manifest.json`
+against HEAD over `include/`, `benchmarks/`, and `tools/`.
+When the diff touches those measured paths, re-run the affected campaign natively
+with the committed manifest, commit a new curated summary with fresh provenance,
+keep all old raw evidence untouched, and regenerate figures only through
+`tools/generate_benchmark_figure.py`.
+When the diff touches none of those paths, record the no-op with the diff itself
+as evidence and stop.
+Layout-equivalent header moves still count as touching measured paths, because the
+claim being refreshed is that the shipped headers produce the published numbers.
+
 ## Pilot results
 
 The table shows medians in millions of items per second.
@@ -86,6 +102,37 @@ The native M1 pilot ran at a high host load and has broad sample spreads, includ
 The only supported native conclusion is that this workload had a repeatable-looking direction worth rerunning under controlled load.
 The Linux VM supports the control-path conclusion that affinity read-back and topology skip logic work.
 It does not support a claim about bare-metal ARM64 cache hierarchy or exact CPU placement costs.
+
+### Native M1 refresh (2026-09-08)
+
+The refresh re-ran the committed manifest natively on the M1 from clean commit
+`1089547d` because the pin-to-HEAD diff touched measured paths: the 0.2
+foundation moved the shipped queues into `include/norn/queue/` behind
+compatibility headers, extracted `isolated_atomic` into `include/norn/core/`,
+added per-worker detail to the benchmark JSON, and extended the manifest with
+the H6 1x1 and 2x2 backoff cases.
+The measured queue logic itself is unchanged; the refresh confirms the moved
+headers still produce the published shape rather than claiming a new speedup.
+Medians in millions of items per second:
+
+| Case | Refresh M1 | Pilot M1 | Reading |
+| --- | ---: | ---: | --- |
+| SPSC unpadded, unpinned | 31.94 | 31.32 | Reproduced within noise. |
+| SPSC padded, unpinned | 39.85 | 60.41 | Wide spread again (21M-54M); padding direction stays exploratory. |
+| SPSC seq_cst, unpinned | 26.78 | 22.78 | Same order of magnitude; no portable ordering-cost claim. |
+| MPMC 1x1 | 132.63 | 133.99 | Reproduced within noise. |
+| MPMC 2x2 | 16.89 | 21.65 | Contention cliff reproduced; exact depth varies with host load. |
+| MPMC 4x4, tight retry | 6.28 | 6.47 | Reproduced within noise. |
+| MPMC 4x4, yield | 7.26 | 9.60 | Same order; yielding still not a universal winner. |
+| MPMC 4x4, bounded retry | 7.38 | 9.80 | Same conclusion as yield. |
+| MPMC 4x4, exponential retry | 7.40 | 11.57 | Same conclusion as bounded retry. |
+| MPMC 1x1, yield / bounded / exponential | 132.08 / 132.08 / 123.08 | N/A | New cases: backoff is near-zero cost at 1x1, as expected without contention. |
+| MPMC 2x2, yield / bounded / exponential | 17.25 / 19.47 / 18.26 | N/A | New cases: backoff variants cluster with tight retry at 2x2. |
+
+The host carried a 1-minute load average of 4.83 at campaign start, so this
+refresh is a loaded-host confirmation, not a low-load baseline.
+Linux-only placements were skipped on macOS; Linux evidence still rests on the
+pilot VM run.
 
 ## Contention, retries, and backoff
 
