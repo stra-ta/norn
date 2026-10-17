@@ -139,6 +139,27 @@ if(NORN_BUILD_TESTS)
       -P ${PROJECT_SOURCE_DIR}/tests/package_consumer_test.cmake)
 endif()
 
+# TSan weakened-order probe: the adversarial counterpart to the release
+# publication store in mpmc_ring. Both targets compile the same probe source;
+# the weakened target flips the publish store to relaxed. The comparison is
+# only meaningful under ThreadSanitizer, so the targets and tests exist only
+# when NORN_TSAN_PROBES=ON (the tsan preset).
+option(NORN_TSAN_PROBES "Build and test the TSan weakened-order probe" OFF)
+if(NORN_TSAN_PROBES)
+  add_executable(norn_probe_ordered experiment/weakened_order_probe.cpp)
+  target_link_libraries(norn_probe_ordered PRIVATE norn norn_warnings)
+  add_executable(norn_probe_weakened experiment/weakened_order_probe.cpp)
+  target_compile_definitions(
+      norn_probe_weakened PRIVATE NORN_EXPERIMENT_WEAKENED_PUBLISH)
+  target_link_libraries(norn_probe_weakened PRIVATE norn norn_warnings)
+  add_test(NAME tsan_probe_ordered COMMAND norn_probe_ordered)
+  # The weakened probe passes only when the race report text is present;
+  # check_race_report.sh inspects the output instead of trusting the exit code.
+  add_test(
+      NAME tsan_probe_weakened
+      COMMAND experiment/check_race_report.sh $<TARGET_FILE:norn_probe_weakened>)
+endif()
+
 if(NORN_BUILD_BENCHMARKS)
   include(FetchContent)
   FetchContent_Declare(
