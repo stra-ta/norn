@@ -26,8 +26,9 @@ value that was, in fact, enqueued.
 When `head_ == tail_` but `head_->next` is non-null, tail is lagging:
 pop helps advance tail (CAS `tail_` from `old_tail` to `next`) and retries
 instead of returning empty.
-The rule is documented in `docs/HAZARD_POINTER_DESIGN.md` (pop step 7 and the
-empty-check section).
+The helping-step rule it discovered is the same one the correction relied on:
+emptiness must be derived from the link structure while the structure is
+observed, and intermediate states need helping steps, not early returns.
 
 **Verification.** Multi-producer single-consumer stress tests assert
 exactly-once consumption counts.

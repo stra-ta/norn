@@ -80,9 +80,29 @@ CTest test: it installs into a private prefix and builds two external
 consumers (one against `norn::core`, one against `norn::norn`) with no source
 include paths.
 
-## Reading the docs
+## Reading the lab
 
-Read the documentation in this order for a full pass over the kept code:
+The include tree is 594 lines. Read it in this order for a full pass over the
+kept code:
+
+1. `include/norn/queue/spsc_ring.hpp` - the whole publication protocol in
+   miniature: two indices, one acquire/release pair, one slot lifetime.
+2. `tests/queue_api_test.cpp` - boundaries and types in practice.
+3. `tests/smoke_test.cpp` - SPSC histories, then the mutex close-and-drain
+   protocol.
+4. `include/norn/core/cache_line.hpp`, `alignment.hpp`, `atomic.hpp` - the 49
+   lines of placement helpers both rings share.
+5. `include/norn/queue/mpmc_ring.hpp` - the Vyukov scheme: sequence numbers,
+   CAS reservation, the two publication stores, and the documented gaps.
+6. `tests/mpmc_test.cpp` - the gated tests that force the reservation and
+   claim windows deterministically.
+7. `tests/stress_test.cpp` - the fixed exactly-once manifest histories.
+8. `include/norn/mutex_queue.hpp` - the blocking reference queues and why
+   close-and-drain works there.
+9. `experiment/weakened_order_probe.cpp` - the adversarial experiment over the
+   real ring.
+
+The written docs explain what each piece proves, in this order:
 
 1. [`docs/CORRECTNESS.md`](docs/CORRECTNESS.md) - what each test proves
 2. [`docs/MEMORY_MODEL.md`](docs/MEMORY_MODEL.md) - the memory-order reasoning per structure

@@ -135,6 +135,7 @@ if(NORN_TSAN_PROBES)
   # check_race_report.sh inspects the output instead of trusting the exit code.
   add_test(
       NAME tsan_probe_weakened
-      COMMAND experiment/check_race_report.sh $<TARGET_FILE:norn_probe_weakened>)
+      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/experiment/check_race_report.sh
+              $<TARGET_FILE:norn_probe_weakened>)
 endif()
 
