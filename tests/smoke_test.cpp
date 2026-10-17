@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "norn/mutex_queue.hpp"
-#include "norn/spsc_queue.hpp"
+#include "norn/queue/spsc_ring.hpp"
 
 namespace {
 
@@ -266,7 +266,7 @@ TEST_CASE("bounded mutex queue supports multiple producers and consumers") {
 }
 
 TEST_CASE("SPSC queue reports empty and full boundaries") {
-  norn::spsc_queue<int, 2> queue;
+  norn::spsc_ring<int, 2> queue;
   REQUIRE(queue.empty());
   REQUIRE(queue.try_push(1));
   REQUIRE(queue.try_push(2));
@@ -279,7 +279,7 @@ TEST_CASE("SPSC queue reports empty and full boundaries") {
 }
 
 TEST_CASE("padded SPSC queue preserves the same basic contract") {
-  norn::spsc_queue_padded<int, 2> queue;
+  norn::spsc_ring_padded<int, 2> queue;
   REQUIRE(queue.try_push(1));
   REQUIRE(queue.try_push(2));
   REQUIRE_FALSE(queue.try_push(3));
@@ -289,7 +289,7 @@ TEST_CASE("padded SPSC queue preserves the same basic contract") {
 }
 
 TEST_CASE("seq_cst SPSC experiment preserves the baseline contract") {
-  norn::spsc_queue_seq_cst<int, 2> queue;
+  norn::spsc_ring_seq_cst<int, 2> queue;
   REQUIRE(queue.try_push(1));
   REQUIRE(queue.try_push(2));
   REQUIRE_FALSE(queue.try_push(3));
@@ -300,7 +300,7 @@ TEST_CASE("seq_cst SPSC experiment preserves the baseline contract") {
 
 TEST_CASE("seq_cst SPSC experiment transfers a validated sequence between two threads") {
   constexpr std::size_t count = 100'000;
-  norn::spsc_queue_seq_cst<std::size_t, 64> queue;
+  norn::spsc_ring_seq_cst<std::size_t, 64> queue;
   std::atomic<bool> failed = false;
   std::thread producer([&] {
     for (std::size_t value = 0; value < count;) {
@@ -331,7 +331,7 @@ TEST_CASE("seq_cst SPSC experiment transfers a validated sequence between two th
 }
 
 TEST_CASE("SPSC queue preserves FIFO order through repeated wraparound") {
-  norn::spsc_queue<int, 3> queue;
+  norn::spsc_ring<int, 3> queue;
   for (int value = 0; value < 10'000; ++value) {
     REQUIRE(queue.try_push(value));
     REQUIRE(queue.try_pop() == value);
@@ -349,7 +349,7 @@ TEST_CASE("SPSC queue supports move-only values and non-default construction") {
     int number;
   };
 
-  norn::spsc_queue<value, 2> queue;
+  norn::spsc_ring<value, 2> queue;
   REQUIRE(queue.emplace(42));
   auto value = queue.try_pop();
   REQUIRE(value.has_value());
@@ -358,7 +358,7 @@ TEST_CASE("SPSC queue supports move-only values and non-default construction") {
 
 TEST_CASE("SPSC queue transfers a validated sequence between two threads") {
   constexpr int count = 100'000;
-  norn::spsc_queue<int, 64> queue;
+  norn::spsc_ring<int, 64> queue;
   std::atomic<bool> consumer_succeeded = true;
 
   std::thread producer([&] {

@@ -1,43 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <concepts>
-#include <cstddef>
 #include <memory>
 #include <optional>
-#include <type_traits>
-#include <utility>
 
-// Canonical 0.2 queue headers.
 #include "norn/queue/mpmc_ring.hpp"
-#include "norn/queue/mpsc_linked_queue.hpp"
 #include "norn/queue/spsc_ring.hpp"
-
-// 0.1 compatibility headers.
-#include "norn/mpmc_queue.hpp"
-#include "norn/spsc_queue.hpp"
-
-// ---------------------------------------------------------------------------
-// Name compatibility: 0.1 names are aliases for the canonical 0.2 types
-// ---------------------------------------------------------------------------
-
-static_assert(std::same_as<norn::spsc_queue<int, 8>, norn::spsc_ring<int, 8>>);
-static_assert(std::same_as<norn::spsc_queue<int, 8, true>, norn::spsc_ring<int, 8, true>>);
-static_assert(
-    std::same_as<norn::spsc_queue<int, 8, true, true>, norn::spsc_ring<int, 8, true, true>>);
-static_assert(std::same_as<norn::spsc_queue_padded<int, 8>, norn::spsc_ring_padded<int, 8>>);
-static_assert(std::same_as<norn::spsc_queue_seq_cst<int, 8>, norn::spsc_ring_seq_cst<int, 8>>);
-static_assert(
-    std::same_as<norn::spsc_queue_seq_cst<int, 8, true>, norn::spsc_ring_seq_cst<int, 8, true>>);
-static_assert(std::same_as<norn::mpmc_queue<int, 8>, norn::mpmc_ring<int, 8>>);
-static_assert(std::same_as<norn::mpsc_linked_queue<int>, norn::mpsc_queue<int>>);
-
-TEST_CASE("0.1 queue names are the canonical 0.2 types") {
-  REQUIRE((std::same_as<norn::spsc_queue<int, 8>, norn::spsc_ring<int, 8>>));
-  REQUIRE((std::same_as<norn::spsc_queue_padded<int, 8>, norn::spsc_ring_padded<int, 8>>));
-  REQUIRE((std::same_as<norn::spsc_queue_seq_cst<int, 8>, norn::spsc_ring_seq_cst<int, 8>>));
-  REQUIRE((std::same_as<norn::mpmc_queue<int, 8>, norn::mpmc_ring<int, 8>>));
-  REQUIRE((std::same_as<norn::mpsc_linked_queue<int>, norn::mpsc_queue<int>>));
-}
 
 // ---------------------------------------------------------------------------
 // Canonical SPSC ring
@@ -133,28 +100,4 @@ TEST_CASE("mpmc_ring supports move-only values") {
   REQUIRE(value.has_value());
   REQUIRE(**value == 42);
   REQUIRE(ring.empty());
-}
-
-// ---------------------------------------------------------------------------
-// Canonical MPSC linked queue
-// ---------------------------------------------------------------------------
-
-TEST_CASE("mpsc_linked_queue basic push and pop with an explicit hazard domain") {
-  norn::hazard_domain domain;
-  norn::mpsc_linked_queue<int> queue(domain);
-
-  REQUIRE(queue.try_push(1));
-  REQUIRE(queue.try_push(2));
-  REQUIRE(queue.try_push(3));
-  REQUIRE_FALSE(queue.empty());
-
-  auto first = queue.try_pop();
-  REQUIRE(first == std::optional<int>(1));
-  auto second = queue.try_pop();
-  REQUIRE(second == std::optional<int>(2));
-  auto third = queue.try_pop();
-  REQUIRE(third == std::optional<int>(3));
-
-  REQUIRE(queue.empty());
-  REQUIRE_FALSE(queue.try_pop().has_value());
 }

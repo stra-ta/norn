@@ -6,8 +6,8 @@
 #include <thread>
 #include <vector>
 
-#include "norn/mpmc_queue.hpp"
-#include "norn/spsc_queue.hpp"
+#include "norn/queue/mpmc_ring.hpp"
+#include "norn/queue/spsc_ring.hpp"
 
 // M5 campaign Proof 1 and the SPSC stress from Proof 5.
 // The manifests are fixed and identical across platforms, toolchains, and build
@@ -72,7 +72,7 @@ constexpr spsc_spec kSpscManifest[] = {
 template <std::size_t Capacity>
 void run_mpmc_history(const run_spec& spec, bool check_fifo) {
   const std::size_t total = spec.producers * spec.values_per_producer;
-  norn::mpmc_queue<std::size_t, Capacity> queue;
+  norn::mpmc_ring<std::size_t, Capacity> queue;
   std::vector<std::atomic<bool>> seen(total);
   for (auto& flag : seen) {
     flag.store(false, std::memory_order_relaxed);
@@ -178,7 +178,7 @@ void run_mpmc_dispatch(const run_spec& spec) {
 
 template <std::size_t Capacity, bool Padded>
 void run_spsc_history(const spsc_spec& spec) {
-  norn::spsc_queue<std::size_t, Capacity, Padded> queue;
+  norn::spsc_ring<std::size_t, Capacity, Padded> queue;
   const std::size_t count = spec.values_per_producer;
   std::atomic<bool> failed{false};
   std::atomic<std::size_t> consumed{0};

@@ -2,7 +2,6 @@
 
 #include <atomic>
 
-#include "norn/cache_line.hpp"
 #include "norn/core/alignment.hpp"
 #include "norn/core/atomic.hpp"
 #include "norn/core/backoff.hpp"
