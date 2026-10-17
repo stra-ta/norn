@@ -17,10 +17,6 @@ REQUIRED = {
         "sequence.store(pos + 1, std::memory_order_release)",
         "sequence.store(pos + Capacity, std::memory_order_release)",
     ),
-    "include/norn/hazard/domain.hpp": (
-        "slots_[SlotIndex].store(ptr, std::memory_order_release)",
-        "std::atomic_thread_fence(std::memory_order_seq_cst)",
-    ),
 }
 
 

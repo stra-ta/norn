@@ -4,6 +4,10 @@ Only real defects discovered during development belong here.
 
 ## M6: Tail-lag false-empty in the Michael-Scott queue
 
+> 0.3 note: the hazard-protected linked queue this defect belongs to left the
+> repository in the 0.3 rescope. The entry stays as the record of the bug and
+> its lesson; the full design note it referenced is in git history.
+
 **Observed behavior.** During implementation of the hazard-pointer
 Michael-Scott queue, a pop could report the queue empty (return `nullopt`)
 immediately after a push had already linked its node.
@@ -22,8 +26,9 @@ value that was, in fact, enqueued.
 When `head_ == tail_` but `head_->next` is non-null, tail is lagging:
 pop helps advance tail (CAS `tail_` from `old_tail` to `next`) and retries
 instead of returning empty.
-The rule is documented in `docs/HAZARD_POINTER_DESIGN.md` (pop step 7 and the
-empty-check section).
+The helping-step rule it discovered is the same one the correction relied on:
+emptiness must be derived from the link structure while the structure is
+observed, and intermediate states need helping steps, not early returns.
 
 **Verification.** Multi-producer single-consumer stress tests assert
 exactly-once consumption counts.

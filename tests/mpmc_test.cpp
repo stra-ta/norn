@@ -9,7 +9,7 @@
 #include <thread>
 #include <vector>
 
-#include "norn/mpmc_queue.hpp"
+#include "norn/queue/mpmc_ring.hpp"
 
 namespace {
 
@@ -66,7 +66,7 @@ struct gated_move {
 }  // namespace
 
 TEST_CASE("MPMC queue reports full and empty boundaries") {
-  norn::mpmc_queue<int, 2> queue;
+  norn::mpmc_ring<int, 2> queue;
   REQUIRE(queue.try_push(1));
   REQUIRE(queue.try_push(2));
   REQUIRE_FALSE(queue.try_push(3));
@@ -79,7 +79,7 @@ TEST_CASE("MPMC queue reports full and empty boundaries") {
 
 TEST_CASE("MPMC queue preserves single-producer FIFO order") {
   constexpr int count = 10'000;
-  norn::mpmc_queue<int, 64> queue;
+  norn::mpmc_ring<int, 64> queue;
   std::atomic<bool> consumer_succeeded = true;
 
   std::thread producer([&] {
@@ -125,7 +125,7 @@ TEST_CASE("MPMC queue consumes every value exactly once across multiple producer
   constexpr std::size_t consumers = 3;
   constexpr std::size_t values_per_producer = 2'000;
   constexpr std::size_t total = producers * values_per_producer;
-  norn::mpmc_queue<std::size_t, 8> queue;
+  norn::mpmc_ring<std::size_t, 8> queue;
   std::vector<std::atomic<bool>> seen(total);
   for (auto& flag : seen) {
     flag.store(false, std::memory_order_relaxed);
@@ -204,7 +204,7 @@ TEST_CASE("MPMC queue consumes every value exactly once across multiple producer
 }
 
 TEST_CASE("MPMC queue supports move-only values") {
-  norn::mpmc_queue<std::unique_ptr<int>, 2> queue;
+  norn::mpmc_ring<std::unique_ptr<int>, 2> queue;
   REQUIRE(queue.try_push(std::make_unique<int>(1)));
   REQUIRE(queue.try_push(std::make_unique<int>(2)));
   auto first = queue.try_pop();
@@ -219,7 +219,7 @@ TEST_CASE("MPMC queue supports move-only values") {
 }
 
 TEST_CASE("MPMC queue reuses slots across wraparound") {
-  norn::mpmc_queue<int, 3> queue;
+  norn::mpmc_ring<int, 3> queue;
   for (int value = 0; value < 10'000; ++value) {
     REQUIRE(queue.try_push(value));
     REQUIRE(queue.try_pop() == value);
@@ -229,7 +229,7 @@ TEST_CASE("MPMC queue reuses slots across wraparound") {
 
 TEST_CASE("reservation window with a blocked producer strands later items until it publishes") {
   constexpr int blocked = 42;
-  norn::mpmc_queue<gated_value, 2> queue;
+  norn::mpmc_ring<gated_value, 2> queue;
   std::atomic<bool> entered = false;
   std::atomic<bool> gate = false;
   std::atomic<bool> push_result = false;
@@ -279,7 +279,7 @@ TEST_CASE("reservation window with a blocked producer strands later items until 
 // would trigger the blocking move while moving the temporary into the slot.
 TEST_CASE("claim window with a blocked consumer advances others but shows false-full to producers") {
   constexpr int held = 1;
-  norn::mpmc_queue<gated_move, 2> queue;
+  norn::mpmc_ring<gated_move, 2> queue;
   std::atomic<bool> entered = false;
   std::atomic<bool> gate = false;
 

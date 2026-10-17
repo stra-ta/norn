@@ -1,22 +1,19 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(norn VERSION 0.2.0 LANGUAGES CXX)
+project(norn VERSION 0.3.0 LANGUAGES CXX)
 
 find_package(Threads REQUIRED)
 include(GNUInstallDirs)
 
-# Tests and benchmarks are on by default only when Norn is the top-level
-# project; subprojects that add_subdirectory Norn opt in explicitly.
+# Tests are on by default only when Norn is the top-level project;
+# subprojects that add_subdirectory Norn opt in explicitly.
 if(PROJECT_IS_TOP_LEVEL)
   set(NORN_BUILD_TESTS_DEFAULT ON)
-  set(NORN_BUILD_BENCHMARKS_DEFAULT ON)
 else()
   set(NORN_BUILD_TESTS_DEFAULT OFF)
-  set(NORN_BUILD_BENCHMARKS_DEFAULT OFF)
 endif()
 
 option(NORN_BUILD_TESTS "Build Norn tests" ${NORN_BUILD_TESTS_DEFAULT})
-option(NORN_BUILD_BENCHMARKS "Build Norn benchmarks" ${NORN_BUILD_BENCHMARKS_DEFAULT})
 option(NORN_WARNINGS_AS_ERRORS "Treat project warnings as errors" ON)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -32,8 +29,8 @@ target_include_directories(
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 set_target_properties(norn_core PROPERTIES EXPORT_NAME core)
 add_library(norn::core ALIAS norn_core)
-# The core tier uses std::thread facilities (backoff yields); propagate the
-# platform threading flags to every consumer, including via norn::norn.
+# The tests and probes spawn std::thread workers, so propagate the platform
+# threading flags to every consumer, including via norn::norn.
 target_link_libraries(norn_core INTERFACE Threads::Threads)
 
 # Full Norn library target; links the core dependency tier.
@@ -97,31 +94,12 @@ if(NORN_BUILD_TESTS)
   add_executable(norn_stress_tests tests/stress_test.cpp)
   target_link_libraries(norn_stress_tests PRIVATE norn norn_warnings Catch2::Catch2WithMain)
   catch_discover_tests(norn_stress_tests PROPERTIES TIMEOUT 300)
-  add_executable(norn_hazard_tests tests/hazard_test.cpp)
-  target_link_libraries(norn_hazard_tests PRIVATE norn norn_warnings Catch2::Catch2WithMain)
-  catch_discover_tests(norn_hazard_tests PROPERTIES TIMEOUT 300)
-
-  add_executable(norn_hardware_thread_control_tests tests/hardware_thread_control_test.cpp)
-  target_include_directories(norn_hardware_thread_control_tests PRIVATE ${PROJECT_SOURCE_DIR}/benchmarks)
-  target_link_libraries(norn_hardware_thread_control_tests PRIVATE norn norn_warnings Threads::Threads)
-  add_test(NAME hardware_thread_control COMMAND norn_hardware_thread_control_tests)
 
   find_package(Python3 COMPONENTS Interpreter)
   if(Python3_Interpreter_FOUND)
     add_test(
-      NAME hardware_campaign_tool
-      COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/hardware_campaign_tool_test.py)
-    # Output-contract test for the hardware benchmark binary JSON. Verifies
-    # completeness and worker statistics; skipped when benchmarks are not built.
-    add_test(
-      NAME hardware_binary_json_contract
-      COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/hardware_campaign_tool_test.py --contract)
-    add_test(
       NAME memory_order_source_contract
       COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/check_memory_order.py --self-test)
-    add_test(
-      NAME committed_evidence_contract
-      COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/check_evidence.py)
   endif()
 
   # External-consumer check: install this build into a private prefix, then
@@ -139,19 +117,25 @@ if(NORN_BUILD_TESTS)
       -P ${PROJECT_SOURCE_DIR}/tests/package_consumer_test.cmake)
 endif()
 
-if(NORN_BUILD_BENCHMARKS)
-  include(FetchContent)
-  FetchContent_Declare(
-    benchmark
-    URL https://github.com/google/benchmark/archive/refs/tags/v1.9.1.tar.gz
-    URL_HASH SHA256=32131c08ee31eeff2c8968d7e874f3cb648034377dfc32a4c377fa8796d84981
-  )
-  set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
-  FetchContent_MakeAvailable(benchmark)
-  add_executable(norn_benchmarks benchmarks/mutex_queue_benchmark.cpp)
-  target_link_libraries(norn_benchmarks PRIVATE norn norn_warnings benchmark::benchmark_main)
-  add_executable(norn_mpmc_benchmarks benchmarks/mpmc_benchmark.cpp)
-  target_link_libraries(norn_mpmc_benchmarks PRIVATE norn norn_warnings benchmark::benchmark_main)
-  add_executable(norn_hardware_benchmarks benchmarks/hardware_campaign_benchmark.cpp)
-  target_link_libraries(norn_hardware_benchmarks PRIVATE norn norn_warnings Threads::Threads)
+# TSan weakened-order probe: the adversarial counterpart to the release
+# publication store in mpmc_ring. Both targets compile the same probe source;
+# the weakened target flips the publish store to relaxed. The comparison is
+# only meaningful under ThreadSanitizer, so the targets and tests exist only
+# when NORN_TSAN_PROBES=ON (the tsan preset).
+option(NORN_TSAN_PROBES "Build and test the TSan weakened-order probe" OFF)
+if(NORN_TSAN_PROBES)
+  add_executable(norn_probe_ordered experiment/weakened_order_probe.cpp)
+  target_link_libraries(norn_probe_ordered PRIVATE norn norn_warnings)
+  add_executable(norn_probe_weakened experiment/weakened_order_probe.cpp)
+  target_compile_definitions(
+      norn_probe_weakened PRIVATE NORN_EXPERIMENT_WEAKENED_PUBLISH)
+  target_link_libraries(norn_probe_weakened PRIVATE norn norn_warnings)
+  add_test(NAME tsan_probe_ordered COMMAND norn_probe_ordered)
+  # The weakened probe passes only when the race report text is present;
+  # check_race_report.sh inspects the output instead of trusting the exit code.
+  add_test(
+      NAME tsan_probe_weakened
+      COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/experiment/check_race_report.sh
+              $<TARGET_FILE:norn_probe_weakened>)
 endif()
+

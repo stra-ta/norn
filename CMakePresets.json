@@ -7,7 +7,7 @@
     {"name":"debug","inherits":"default","binaryDir":"${sourceDir}/build/debug","cacheVariables":{"CMAKE_BUILD_TYPE":"Debug"}},
     {"name":"asan","inherits":"debug","binaryDir":"${sourceDir}/build/asan","cacheVariables":{"CMAKE_CXX_FLAGS":"-fsanitize=address -fno-omit-frame-pointer","CMAKE_EXE_LINKER_FLAGS":"-fsanitize=address"}},
     {"name":"ubsan","inherits":"debug","binaryDir":"${sourceDir}/build/ubsan","cacheVariables":{"CMAKE_CXX_FLAGS":"-fsanitize=undefined -fno-omit-frame-pointer","CMAKE_EXE_LINKER_FLAGS":"-fsanitize=undefined"}},
-    {"name":"tsan","inherits":"debug","binaryDir":"${sourceDir}/build/tsan","cacheVariables":{"CMAKE_CXX_FLAGS":"-fsanitize=thread","CMAKE_EXE_LINKER_FLAGS":"-fsanitize=thread"}}
+    {"name":"tsan","inherits":"debug","binaryDir":"${sourceDir}/build/tsan","cacheVariables":{"CMAKE_CXX_FLAGS":"-fsanitize=thread","CMAKE_EXE_LINKER_FLAGS":"-fsanitize=thread","NORN_TSAN_PROBES":"ON"}}
   ],
   "buildPresets": [
     {"name":"default","configurePreset":"default"},

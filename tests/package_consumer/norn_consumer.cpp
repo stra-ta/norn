@@ -7,7 +7,6 @@
 #include <optional>
 #include <thread>
 
-#include <norn/core/backoff.hpp>
 #include <norn/queue/spsc_ring.hpp>
 
 int main() {
@@ -15,18 +14,16 @@ int main() {
   constexpr int produced_value = 7;
 
   std::thread producer([&ring, produced_value] {
-    norn::backoff::tight backoff;
     while (!ring.try_push(produced_value)) {
-      backoff();
+      std::this_thread::yield();
     }
   });
 
-  norn::backoff::tight backoff;
   std::optional<int> popped;
-  while (!popped) {
+  while (!popped.has_value()) {
     popped = ring.try_pop();
-    if (!popped) {
-      backoff();
+    if (!popped.has_value()) {
+      std::this_thread::yield();
     }
   }
 

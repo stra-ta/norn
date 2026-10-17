@@ -116,7 +116,16 @@ class mpmc_ring {
       pos = enqueue_pos_.value.load(std::memory_order_relaxed);
     }
     ::new (static_cast<void*>(cell->storage)) T(std::forward<Args>(args)...);
+#if defined(NORN_EXPERIMENT_WEAKENED_PUBLISH)
+    // Experimental adversarial build, see experiment/README.md. The
+    // publication store drops its release ordering, so the payload write is
+    // no longer ordered before a consumer's read. Under ThreadSanitizer the
+    // payload access reports a data race. The default build below keeps the
+    // release store that the queue's correctness rests on.
+    cell->sequence.store(pos + 1, std::memory_order_relaxed);
+#else
     cell->sequence.store(pos + 1, std::memory_order_release);
+#endif
     return true;
   }
 
