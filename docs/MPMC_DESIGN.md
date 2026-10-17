@@ -8,7 +8,8 @@ This document records the design before implementation.
 
 ## API
 
-`norn::mpmc_queue<T, Capacity>` is a header-only template in `include/norn/mpmc_queue.hpp`.
+`norn::mpmc_ring<T, Capacity>` is a header-only template in
+`include/norn/queue/mpmc_ring.hpp`.
 
 - `emplace(Args&&...) -> bool` constructs a value in place and returns whether it was accepted.
 - `try_push(const T&)` and `try_push(T&&)` forward to `emplace`.
@@ -326,11 +327,10 @@ The implementation enforces its preconditions with static asserts: `Capacity >= 
 noexcept construction for `emplace`, nothrow moves for the pop paths, and a noexcept
 destructor for `T`.
 
-A throughput benchmark matrix (1x1, 2x2, 4x4) will use the existing benchmark tooling,
-with producer and consumer counts recorded in the metadata.
-The existing `benchmark_configurations` family map supports MPMC entries without schema
-rework, one key per configuration with explicit counts.
-Real GNU GCC verification will be repeated on the disposable Linux VM.
+Verification is the test suite plus sanitizers: the deterministic gated
+tests, the fixed exactly-once manifest histories, and the weakened-order
+probe under the `tsan` preset. Benchmark tooling left the repository in 0.3;
+historical measurements stay under `docs/evidence/` with their provenance.
 
 ## Decisions to confirm
 

@@ -4,6 +4,10 @@ Only real defects discovered during development belong here.
 
 ## M6: Tail-lag false-empty in the Michael-Scott queue
 
+> 0.3 note: the hazard-protected linked queue this defect belongs to left the
+> repository in the 0.3 rescope. The entry stays as the record of the bug and
+> its lesson; the full design note it referenced is in git history.
+
 **Observed behavior.** During implementation of the hazard-pointer
 Michael-Scott queue, a pop could report the queue empty (return `nullopt`)
 immediately after a push had already linked its node.

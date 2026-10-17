@@ -38,18 +38,15 @@ window and verifies the asymmetric behavior: other consumers advance past the he
 position, while producers see false-full at the held slot because the item was already
 consumed at the claim linearization point.
 
-M5 is a correctness campaign rather than a feature milestone.
-It adds parameterized exactly-once and 1P1C FIFO histories for the MPMC queue, a 1P1C
-parameterized stress for the SPSC queue including the padded variant, deterministic
-close-and-drain protocols for both mutex queue families, and a blocked-consumer wake
-test.
-The campaign also runs an educational weakened-order probe outside the repository that
-changes the producer's publish store to relaxed and shows the resulting TSan race on
-the payload access.
-All 24 tests pass under default, Release, ASan, UBSan, and TSan on macOS (Apple Clang)
-and ARM64 Linux (GNU GCC 13.3).
-The full campaign design, platform matrix, and results are in
-`docs/CORRECTNESS_CAMPAIGN.md`.
+Stress coverage adds parameterized exactly-once and 1P1C FIFO histories for the
+MPMC ring, a 1P1C parameterized stress for the SPSC ring including the padded
+variant, deterministic close-and-drain protocols for both mutex queue families,
+and a blocked-consumer wake test.
+
+The weakened-order probe lives in the repository since 0.3: `experiment/`
+changes the producer's publish store to relaxed and shows the resulting TSan
+race on the payload access, with an ordered control that must run clean.
+`experiment/README.md` records the run commands and results.
 
 A producer claims a slot with a CAS on `enqueue_pos_` and publishes the object with a
 release store on the slot sequence.
@@ -62,4 +59,5 @@ Successful operations linearize at their reservation CAS.
 Failed operations linearize at their probe only under quiescence, meaning no thread is
 inside the window between its reservation CAS and its publication store.
 
-Later milestones will document operation contracts, invariants, linearization points, progress guarantees, stress coverage, sanitizer limitations, and history-checking results.
+`docs/MEMORY_MODEL.md` records the memory-order side and `docs/MPMC_DESIGN.md`
+the design decisions for each structure.
